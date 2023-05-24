@@ -1,16 +1,25 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Drawing;
 using System.Runtime.InteropServices;
-using Color = System.Windows.Media.Color;
-using OFT.Localization;
+//using Color = System.Windows.Media.Color;
+
+//using OFT.Core;
+//using OFT.Localization;
+using OFT.Rendering.Context;
 using OFT.Rendering;
 using OFT.Attributes;
+
 using ATAS.Indicators;
-using OFT.Core;
+using ATAS.Indicators.Drawing;
 using ATAS.Indicators.Technical;
 using ATAS.Indicators.Technical.Properties;
+
+using Brushes = System.Drawing.Brushes;
+using Color = System.Drawing.Color;
+
 
 using System.Windows.Media;
 using System.Xml.Linq;
@@ -47,7 +56,7 @@ namespace ATAS.Indicators.Technical
             public bool IsNew { get; set; }
             public bool IsBullish { get; set; }
             public LineSeries Level { get; set; }
-            public Rectangle Area { get; set; }
+            public DrawingRectangle Area { get; set; }
         }
 
         public class SessionRange
@@ -56,35 +65,43 @@ namespace ATAS.Indicators.Technical
             public LineSeries Min { get; set; }
         }
 
-        private int n = 0;
-
-        // Method for setting fair value gaps
-        private void SetFvg(Fvg id, int offset, Color bgCss, Color lCss)
+        protected override void OnCalculate(int bar, decimal value)
         {
-            double avg = (id.Top + id.Bottom) / 2.0;
+            var candle = bar;
+            var lastCandle = bar - 1;
+            var bLastCandle = bar - 2;
 
-            context.DrawingRectangle area = new Rectangle
+            // Method for setting fair value gaps
+            void SetFvg(Fvg id, int offset, Color bgCss, Color lCss)
             {
-                Left = n - offset,
-                Top = id.Top,
-                Right = n,
-                Bottom = id.Bottom,
-                BackColor = bgCss
-            };
+                double avg = (id.Top + id.Bottom) / 2.0;
 
-            LineSeries avgL = new LineSeries
-            {
-                X1 = n - offset,
-                Y1 = avg,
-                X2 = n,
-                Y2 = avg,
-                Color = lCss,
-                Style = LineStyle.Dashed
-            };
+                Rectangle area = new Rectangle
+                {
+                    Width = candle - offset,
+                    Height = ((int)id.Top),
+                    Y = candle,
+                    X = ((int)id.Bottom),
 
-            id.Lvl = avgL;
-            id.Area = area;
+                };
+
+                LineSeries avgL = new LineSeries("avgL")
+                {
+                    Width = n - offset,
+                    Y1 = avg,
+                    X2 = n,
+                    Y2 = avg,
+                    Color = lCss,
+                    LineDashStyle = Dashed
+                };
+
+                id.Level = avgL;
+                id.Area = area;
+            }
+
         }
+
+
 
         // Method for setting session range maximum/minimum
         private void SetRange(SessionRange id)
