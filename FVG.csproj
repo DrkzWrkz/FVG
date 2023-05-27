@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="2.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="ATAS.DataFeedsCore">
       <HintPath>..\..\..\..\..\..\Program Files (x86)\ATAS Platform\ATAS.DataFeedsCore.dll</HintPath>
     </Reference>
