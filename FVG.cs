@@ -21,18 +21,30 @@ using ATAS.Indicators.Drawing;
 
 
 using Utils.Common.Localization;
+using DocumentFormat.OpenXml.Vml;
+using DocumentFormat.OpenXml.Drawing;
+using DocumentFormat.OpenXml.Office2010.Excel;
 
 namespace ATAS.Indicators.Technical
 {
     [DisplayName("Fair Value Gaps")]
     public class FVG : Indicator
     {
+
+        private float Top;
+        private float Bottom;
+        private bool Mitigated = false;
+        private bool IsNew = false;
+        private bool IsBull = false;
+        private LineSeries Lvl = new LineSeries("Level");
+        private DrawingRectangle Area;
+
         // Variables
-        private  Color chartCss;
+        private Color chartCss;
         private  FVG sfvg;
         private  SessionRange sesr;
-        private  Box area;
-        private  Line avg;
+        private  DrawingRectangle area;
+        private  LineSeries avg;
         private Highest High = new Highest();
         private Lowest Low = new Lowest();
 
@@ -63,6 +75,11 @@ namespace ATAS.Indicators.Technical
 
         [Display(Name = "Mitigated", GroupName = "Bear", Order = 2)]
         public Color BearMitigatedCss { get; set; } = Color.FromArgb(80, 255, 0, 0); // Dark red with transparency
+        public class SessionRange
+        {
+            public LineSeries Max { get; set; }
+            public LineSeries Min { get; set; }
+        }
 
         public FVG()
             : base(useCandles: true)
@@ -72,229 +89,15 @@ namespace ATAS.Indicators.Technical
             EnableCustomDrawing = true;
             SubscribeToDrawingEvents(DrawingLayouts.Historical);
             DrawAbovePrice = false;
-            float Top;
-            float Bottom;
-            bool Mitigated;
-            bool IsNew;
-            bool IsBull;
-            Line Lvl;
-            Box Area;
+
 
 
         }
-
-
-        public class SessionRange
-        {
-            public Line Max { get; set; }
-            public Line Min { get; set; }
-        }
-
-
-        public class Data
-        {
-            public float High { get; set; }
-            public float Low { get; set; }
-            public float Close { get; set; }
-            public float Length { get; set; }
-        }
-
-        public class Box
-        {
-            public float X1 { get; set; }
-            public float Y1 { get; set; }
-            public float X2 { get; set; }
-            public float Y2 { get; set; }
-            public Color? BorderColor { get; set; }
-            public Color? FillColor { get; set; }
-
-            public Box(float x1, float y1, float x2, float y2, Color? borderColor, Color? fillColor)
-            {
-                X1 = x1;
-                Y1 = y1;
-                X2 = x2;
-                Y2 = y2;
-                BorderColor = borderColor;
-                FillColor = fillColor;
-            }
-        }
-
-        public class Line
-        {
-            public float X1 { get; set; }
-            public float Y1 { get; set; }
-            public float X2 { get; set; }
-            public float Y2 { get; set; }
-            public Color? Color { get; set; }
-            public LineStyle? Style { get; set; }
-
-            public Line(float x1, float y1, float x2, float y2, Color? color, LineStyle? style)
-            {
-                X1 = x1;
-                Y1 = y1;
-                X2 = x2;
-                Y2 = y2;
-                Color = color;
-                Style = style;
-            }
-
-            public void SetColor(Color? color)
-            {
-                Color = color;
-            }
-        }
-
-        public enum LineStyle
-        {
-            Solid,
-            Dashed,
-            Dotted
-        }
-
-        public enum Extend
-        {
-            Neither,
-            Left,
-            Right,
-            Both
-        }
-        
         protected override void OnCalculate(int bar, decimal value)
         {
-            var n = bar;
-            var dtf = TimeFrame == "Daily";
+            
 
-            // On new session
-            if (dtf)
-            {
-                // Set delimiter
-                var delimiter = new Line(n, High + InstrumentInfo.TickSize, n, Low - InstrumentInfo.TickSize, Colors.White,LineStyle.Dashed)
-                {
-                    Color = ChartCss,
-                    Style = LineStyle.Dashed,
-                    Extend = LineExtend.Both
-                };
-
-                // Set new range
-                var sesr = new SessionRange(
-                    new LineObject(n, High, n, High) { Color = ChartCss },
-                    new LineObject(n, Low, n, Low) { Color = ChartCss }
-                );
-
-                sfvg.IsNew = true;
-
-                // Set prior session fvg right coordinates
-                if (sfvg.Lvl != null)
-                {
-                    sfvg.Lvl.X2 = n - 2;
-                    sfvg.Area.Right = n - 2;
-                }
-            }
-            // Set range
-            else if (sesr != null)
-            {
-                sesr.SetRange();
-
-                // Set range lines color
-                sesr.Max.Color = sfvg.IsBull ? BullCss : BearCss;
-                sesr.Min.Color = sfvg.IsBull ? BullCss : BearCss;
-            }
-
-            // Set FVG
-            // New session bullish fvg
-            if (bull_fvg && sfvg.IsNew)
-            {
-                sfvg = new Fvg(low, high[2], false, false, true);
-                sfvg.SetFvg(2, BullAreaCss, BullCss);
-
-                bull_isnew = true;
-            }
-            // New session bearish fvg
-            else if (bear_fvg && sfvg.IsNew)
-            {
-                sfvg = new Fvg(low[2], high, false, false, false);
-                sfvg.SetFvg(2, BearAreaCss, BearCss);
-
-                bear_isnew = true;
-            }
-
-            // Change object transparencies if mitigated
-            if (!sfvg.Mitigated)
-            {
-                // If session fvg is bullish
-                if (sfvg.IsBull && close < sfvg.Btm)
-                {
-                    sfvg.SetFvg(1, BullMitigatedCss, BullCss);
-
-                    sfvg.Mitigated = true;
-                    bull_mitigated = true;
-                }
-                // If session fvg is bearish
-                else if (!sfvg.IsBull && close > sfvg.Top)
-                {
-                    sfvg.SetFvg(1, BearMitigatedCss, BearCss);
-
-                    sfvg.Mitigated = true;
-                    bear_mitigated = true;
-                }
-            }
-
-            // Set fvg right coordinates to current bar
-            if (!sfvg.IsNew)
-            {
-                sfvg.Lvl.X2 = n;
-                sfvg.Area.Right = n;
-            }
-
-
-            void SetFVG(FVG id, int offset, Color bgCss, Color lineCss)
-            {
-                float avg = (id.Top + id.Bottom) / 2;
-
-                id.Area = new Box(n - offset, id.Top, n, id.Bottom, null, bgCss);
-                id.Lvl = new Line(n - offset, avg, n, avg, lineCss, LineStyle.Dashed);
-            }
-
-            void SetRange(SessionRange range, float high, float low)
-            {
-                range.Max.SetXY2(n, Math.Max(high, range.Max.GetY2()));
-                range.Max.SetY1(Math.Max(high, range.Max.GetY2()));
-
-                range.Min.SetXY2(n, Math.Min(low, range.Min.GetY2()));
-                range.Min.SetY1(Math.Min(low, range.Min.GetY2()));
-            }
-
-            if (bull_isnew)
-            {
-                AddAlert("Alert1", "Bullish FVG");
-            }
-            if (bear_isnew)
-            {
-                AddAlert("Alert1", "Bearish FVG");
-            }
-            if (bull_mitigated)
-            {
-                AddAlert("Alert1", "Mitigated Bullish FVG");
-            }
-            if (bear_mitigated)
-            {
-                AddAlert("Alert1", "Mitigated Bearish FVG");
-            }
-            if (within_bull_fvg)
-            {
-                AddAlert("Alert1", "Price Within Bullish FVG");
-            }
-            if (within_bear_fvg)
-            {
-                AddAlert("Alert1", "Price Within Bearish FVG");
-
-
-
-
-
-            }
-
-
+        }
 
     }
 }
