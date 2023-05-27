@@ -5,6 +5,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Windows.Media;
 using System.Drawing;
 using System.Runtime.CompilerServices;
+using System.Linq;
+using System.Collections.Generic;
 using Color = System.Windows.Media.Color;
 
 using OFT.Attributes;
@@ -31,6 +33,8 @@ namespace ATAS.Indicators.Technical
         private  SessionRange sesr;
         private  Box area;
         private  Line avg;
+        private Highest High = new Highest();
+        private Lowest Low = new Lowest();
 
         private  bool bullFVG;
         private  bool bearFVG;
@@ -68,10 +72,6 @@ namespace ATAS.Indicators.Technical
             EnableCustomDrawing = true;
             SubscribeToDrawingEvents(DrawingLayouts.Historical);
             DrawAbovePrice = false;
-
-        }
-        public class FVG_
-        {
             float Top;
             float Bottom;
             bool Mitigated;
@@ -79,6 +79,7 @@ namespace ATAS.Indicators.Technical
             bool IsBull;
             Line Lvl;
             Box Area;
+
 
         }
 
@@ -157,118 +158,144 @@ namespace ATAS.Indicators.Technical
             Right,
             Both
         }
-        private static void SetRange(SessionRange range, float high, float low)
-        {
-            range.Max.SetXY2(n, Math.Max(high, range.Max.GetY2()));
-            range.Max.SetY1(Math.Max(high, range.Max.GetY2()));
-
-            range.Min.SetXY2(n, Math.Min(low, range.Min.GetY2()));
-            range.Min.SetY1(Math.Min(low, range.Min.GetY2()));
-        }
-
-        private static void SetFVG(FVG id, int offset, Color bgCss, Color lineCss)
-        {
-            float avg = (id.Top + id.Bottom) / 2;
-
-            id.Area = new Box(n - offset, id.Top, n, id.Bottom, null, bgCss);
-            id.Lvl = new Line(n - offset, avg, n, avg, lineCss, LineStyle.Dashed);
-        }
-        private static bool IsNewSession(Data[] Data, int index)
-        {
-            // Implement the logic to check if a new session has started based on your Data
-            // You can use the index and Data array to determine the start of a new session
-            // Return true if it is a new session, false otherwise
-            return false;
-        }
-
+        
         protected override void OnCalculate(int bar, decimal value)
         {
-            //var n = bar;
-            
+            var n = bar;
+            var dtf = TimeFrame == "Daily";
 
-
-
-            // Start processing Data
-            for (int n = bar; n < Data.Length; n++)
+            // On new session
+            if (dtf)
             {
-                float high = bar.High;
-                float low = Data[n].Low;
-                float close = Data[n].Close;
-
-                // New session
-                if (IsNewSession(Data, n))
+                // Set delimiter
+                var delimiter = new Line(n, High + InstrumentInfo.TickSize, n, Low - InstrumentInfo.TickSize, Colors.White,LineStyle.Dashed)
                 {
-                    // Set delimiter
-                    DrawLine(n, high + syminfo.mintick, n, low - syminfo.mintick, chartCss, LineStyle.Dashed, Extend.Both);
+                    Color = ChartCss,
+                    Style = LineStyle.Dashed,
+                    Extend = LineExtend.Both
+                };
 
-                    // Set new range
-                    sesr = new SessionRange
-                    {
-                        Max = DrawLine(n, high, n, high, chartCss),
-                        Min = DrawLine(n, low, n, low, chartCss)
-                    };
+                // Set new range
+                var sesr = new SessionRange(
+                    new LineObject(n, High, n, High) { Color = ChartCss },
+                    new LineObject(n, Low, n, Low) { Color = ChartCss }
+                );
 
-                    sfvg.IsNew = true;
+                sfvg.IsNew = true;
 
-                    // Set prior session fvg right coordinates
-                    if (sfvg.Lvl != null)
-                    {
-                        sfvg.Lvl.X2 := n - 2;
-                        sfvg.Area.SetRight(n - 2);
-                    }
-                }
-                // Set range
-                else if (sesr != null)
+                // Set prior session fvg right coordinates
+                if (sfvg.Lvl != null)
                 {
-                    SetRange(sesr, high, low);
-                    sesr.Max.SetColor(sfvg.IsBull ? bullCss : bearCss);
-                    sesr.Min.SetColor(sfvg.IsBull ? bullCss : bearCss);
+                    sfvg.Lvl.X2 = n - 2;
+                    sfvg.Area.Right = n - 2;
                 }
-
-                // Set FVG
-                if (bullFVG && sfvg.IsNew)
-                {
-                    sfvg = new FVG { Top = low, Bottom = high[2], Mitigated = false, IsNew = false, IsBull = true };
-                    SetFVG(sfvg, 2, bullAreaCss, bullCss);
-                    bullIsNew = true;
-                }
-                else if (bearFVG && sfvg.IsNew)
-                {
-                    sfvg = new FVG { Top = low[2], Bottom = high, Mitigated = false, IsNew = false, IsBull = false };
-                    SetFVG(sfvg, 2, bearAreaCss, bearCss);
-                    bearIsNew = true;
-                }
-
-                if (!sfvg.Mitigated)
-                {
-                    if (sfvg.IsBull && close < sfvg.Bottom)
-                    {
-                        SetFVG(sfvg, 1, bullMitigatedCss, bullCss);
-                        sfvg.Mitigated = true;
-                        bullMitigated = true;
-                    }
-                    else if (!sfvg.IsBull && close > sfvg.Top)
-                    {
-                        SetFVG(sfvg, 1, bearMitigatedCss, bearCss);
-                        sfvg.Mitigated = true;
-                        bearMitigated = true;
-                    }
-                }
-
-                if (!sfvg.IsNew)
-                {
-                    sfvg.Lvl.X2 = n;
-                    sfvg.Area.SetRight(n);
-                }
-
-                // Check conditions
-                // ...
             }
-        }
+            // Set range
+            else if (sesr != null)
+            {
+                sesr.SetRange();
+
+                // Set range lines color
+                sesr.Max.Color = sfvg.IsBull ? BullCss : BearCss;
+                sesr.Min.Color = sfvg.IsBull ? BullCss : BearCss;
+            }
+
+            // Set FVG
+            // New session bullish fvg
+            if (bull_fvg && sfvg.IsNew)
+            {
+                sfvg = new Fvg(low, high[2], false, false, true);
+                sfvg.SetFvg(2, BullAreaCss, BullCss);
+
+                bull_isnew = true;
+            }
+            // New session bearish fvg
+            else if (bear_fvg && sfvg.IsNew)
+            {
+                sfvg = new Fvg(low[2], high, false, false, false);
+                sfvg.SetFvg(2, BearAreaCss, BearCss);
+
+                bear_isnew = true;
+            }
+
+            // Change object transparencies if mitigated
+            if (!sfvg.Mitigated)
+            {
+                // If session fvg is bullish
+                if (sfvg.IsBull && close < sfvg.Btm)
+                {
+                    sfvg.SetFvg(1, BullMitigatedCss, BullCss);
+
+                    sfvg.Mitigated = true;
+                    bull_mitigated = true;
+                }
+                // If session fvg is bearish
+                else if (!sfvg.IsBull && close > sfvg.Top)
+                {
+                    sfvg.SetFvg(1, BearMitigatedCss, BearCss);
+
+                    sfvg.Mitigated = true;
+                    bear_mitigated = true;
+                }
+            }
+
+            // Set fvg right coordinates to current bar
+            if (!sfvg.IsNew)
+            {
+                sfvg.Lvl.X2 = n;
+                sfvg.Area.Right = n;
+            }
 
 
-       
+            void SetFVG(FVG id, int offset, Color bgCss, Color lineCss)
+            {
+                float avg = (id.Top + id.Bottom) / 2;
+
+                id.Area = new Box(n - offset, id.Top, n, id.Bottom, null, bgCss);
+                id.Lvl = new Line(n - offset, avg, n, avg, lineCss, LineStyle.Dashed);
+            }
+
+            void SetRange(SessionRange range, float high, float low)
+            {
+                range.Max.SetXY2(n, Math.Max(high, range.Max.GetY2()));
+                range.Max.SetY1(Math.Max(high, range.Max.GetY2()));
+
+                range.Min.SetXY2(n, Math.Min(low, range.Min.GetY2()));
+                range.Min.SetY1(Math.Min(low, range.Min.GetY2()));
+            }
+
+            if (bull_isnew)
+            {
+                AddAlert("Alert1", "Bullish FVG");
+            }
+            if (bear_isnew)
+            {
+                AddAlert("Alert1", "Bearish FVG");
+            }
+            if (bull_mitigated)
+            {
+                AddAlert("Alert1", "Mitigated Bullish FVG");
+            }
+            if (bear_mitigated)
+            {
+                AddAlert("Alert1", "Mitigated Bearish FVG");
+            }
+            if (within_bull_fvg)
+            {
+                AddAlert("Alert1", "Price Within Bullish FVG");
+            }
+            if (within_bear_fvg)
+            {
+                AddAlert("Alert1", "Price Within Bearish FVG");
+
+
+
+
+
+            }
+
+
+
     }
 }
 
-        // Define other helper methods and classes as needed
