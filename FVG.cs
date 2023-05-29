@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Collections.Generic;
 using Color = System.Windows.Media.Color;
+using Brushes = System.Drawing.Brushes;
 
 using OFT.Attributes;
 using OFT.Rendering;
@@ -21,6 +22,7 @@ using ATAS.Indicators.Drawing;
 using Utils.Common.Localization;
 using OFT.Core.Candles;
 using DocumentFormat.OpenXml.Math;
+using DocumentFormat.OpenXml.InkML;
 
 namespace ATAS.Indicators.Technical
 {
@@ -48,22 +50,22 @@ namespace ATAS.Indicators.Technical
         private  bool withinBearFVG = false;
 
         [Display(Name = "FVG Level", GroupName = "Bull", Order = 0)]
-        public Color BullCss { get; set; } = Color.FromArgb(255, 0, 128, 128); // Dark teal
+        public System.Drawing.Color BullCss { get; set; } = System.Drawing.Color.FromArgb(255, 0, 128, 128); // Dark teal
 
         [Display(Name = "Area", GroupName = "Bull", Order = 1)]
-        public Color BullAreaCss { get; set; } = Color.FromArgb(50, 0, 128, 128); // Dark teal with transparency
+        public System.Drawing.Color BullAreaCss { get; set; } = System.Drawing.Color.FromArgb(50, 0, 128, 128); // Dark teal with transparency
 
         [Display(Name = "Mitigated", GroupName = "Bull", Order = 2)]
-        public Color BullMitigatedCss { get; set; } = Color.FromArgb(80, 0, 128, 128); // Dark teal with transparency
+        public System.Drawing.Color BullMitigatedCss { get; set; } = System.Drawing.Color.FromArgb(80, 0, 128, 128); // Dark teal with transparency
 
         [Display(Name = "FVG Level", GroupName = "Bear", Order = 0)]
-        public Color BearCss { get; set; } = Color.FromArgb(255, 255, 0, 0); // Dark red
+        public System.Drawing.Color BearCss { get; set; } = System.Drawing.Color.FromArgb(255, 255, 0, 0); // Dark red
 
         [Display(Name = "Area", GroupName = "Bear", Order = 1)]
-        public Color BearAreaCss { get; set; } = Color.FromArgb(50, 255, 0, 0); // Dark red with transparency
+        public System.Drawing.Color BearAreaCss { get; set; } = System.Drawing.Color.FromArgb(50, 255, 0, 0); // Dark red with transparency
 
         [Display(Name = "Mitigated", GroupName = "Bear", Order = 2)]
-        public Color BearMitigatedCss { get; set; } = Color.FromArgb(80, 255, 0, 0); // Dark red with transparency
+        public System.Drawing.Color BearMitigatedCss { get; set; } = System.Drawing.Color.FromArgb(80, 255, 0, 0); // Dark red with transparency
 
         public class FVG 
         {
@@ -74,6 +76,8 @@ namespace ATAS.Indicators.Technical
             public bool IsBull = false;
             public Rectangle Lvl = new Rectangle(0, 0, 0, 0);
             public Rectangle Area = new Rectangle(0, 0, 0, 0);
+
+            public FVG(float Top, float Bottom, bool Mitigated, bool IsNew, bool IsBull) { }
 
         }
         
@@ -97,99 +101,20 @@ namespace ATAS.Indicators.Technical
             DrawAbovePrice = false;
             
         }
-        protected override void OnCalculate(int bar, decimal value)
-        {
-            var n = bar; 
-            var c = GetCandle(bar);
-            RenderPen pen = new RenderPen(chartCss);
-            if (IsNewSession(bar))
-            {
-                RenderContext context;
-
-                context.DrawLine(pen, n, (int)c.High + (int)InstrumentInfo.TickSize, n, (int)c.Low - (int)InstrumentInfo.TickSize);
-
-                // Set new range
-                sesr = new SessionRange
-                {
-                    Max = Chart.DrawLine(n, High, n, High, color: chartCss),
-                    Min = Chart.DrawLine(n, Low, n, Low, color: chartCss)
-                };
-
-                sfvg.isNew = true;
-
-                // Set prior session FVG right coordinates
-                if (sfvg.lvl != null)
-                {
-                    sfvg.lvl.X2 = n - 2;
-                    sfvg.area.SetRight(n - 2);
-                }
-            }
-            else if (sesr != null)
-            {
-                SetRange(sesr);
-
-                // Set range lines color
-                sesr.Max.Color = sfvg.isBull ? BullCss : BearCss;
-                sesr.Min.Color = sfvg.isBull ? BullCss : BearCss;
-            }
-
-            //-----------------------------------------------------------------------------}
-            // Set FVG
-            //-----------------------------------------------------------------------------{
-            // New session bullish FVG
-            if (bull_fvg && sfvg.isNew)
-            {
-                sfvg = new FVG(low, High[2], false, false, true);
-                sfvg.SetFVG(2, BullAreaCss, BullCss);
-
-                bull_isnew = true;
-            }
-
-            // New session bearish FVG
-            else if (bear_fvg && sfvg.isNew)
-            {
-                sfvg = new FVG(Low[2], high, false, false, false);
-                sfvg.SetFVG(2, BearAreaCss, BearCss);
-
-                bear_isnew = true;
-            }
-
-            // Change object transparencies if mitigated
-            if (!sfvg.mitigated)
-            {
-                // If session FVG is bullish
-                if (sfvg.isBull && close < sfvg.btm)
-                {
-                    sfvg.SetFVG(1, BullMitigatedCss, BullCss);
-
-                    sfvg.mitigated = true;
-                    bull_mitigated = true;
-                }
-                // If session FVG is bearish
-                else if (!sfvg.isBull && close > sfvg.top)
-                {
-                    sfvg.SetFVG(1, BearMitigatedCss, BearCss);
-
-                    sfvg.mitigated = true;
-                    bear_mitigated = true;
-                }
-            }
-
-            // Set FVG right coordinates to current bar
-            if (!sfvg.isNew)
-            {
-                sfvg.lvl.X2 = n;
-                sfvg.area.SetRight(n);
-            }
-
-        }
-
-
-        
         protected override void OnRender(RenderContext context, DrawingLayouts layout)
         {
             var candle = GetCandle(0);
 
+
+
+        }
+
+
+        protected override void OnCalculate(int bar, decimal value)
+        {
+            var n = bar; 
+            var c = GetCandle(bar);
+            var candle = GetCandle(bar);
             void SetFVG(FVG id, int offset, System.Drawing.Color bgCss, System.Drawing.Color lCss)
             {
 
@@ -197,17 +122,18 @@ namespace ATAS.Indicators.Technical
 
                 // Create a box object
                 Rectangle Area = new Rectangle(((int)candle.Close) - offset, ((int)id.Top), ((int)candle.Close), ((int)id.Bottom));
-                context.FillRectangle(bgCss,rect:Area);
+                //context.FillRectangle(bgCss, rect: Area);
 
 
                 // Create a line object
                 Rectangle avgLine = new Rectangle((int)candle.Close - offset, (int)avg, (int)candle.Close, (int)avg);
-                context.FillRectangle(lCss, rect:avgLine);
+                //context.FillRectangle(lCss, rect: avgLine);
 
                 // Set the objects in the FVG object
                 id.Lvl = avgLine;
                 id.Area = Area;
             }
+
             void SetRange(SessionRange id)
             {
                 decimal max = candle.High > id.Max.Height ? candle.High : id.Max.Height;
@@ -222,8 +148,124 @@ namespace ATAS.Indicators.Technical
                 id.Min.Height = (int)min;
             }
 
+            System.Drawing.Pen pen = new System.Drawing.Pen(chartCss);
+            if (IsNewSession(bar))
+            {
+
+                DrawingRectangle f = new DrawingRectangle( n, (int)c.High + (int)InstrumentInfo.TickSize, n, (int)c.Low - (int)InstrumentInfo.TickSize, pen , Brushes.Gray);
+
+                // Set new range
+                sesr = new SessionRange
+                {
+                    Max = new Rectangle(n, (int)c.High, n, (int)c.High),
+                    Min = new Rectangle(n, (int)c.Low, n, (int)c.Low)
+                };
+
+                sfvg.IsNew = true;
+
+                // Set prior session FVG right coordinates
+                if (sfvg.Lvl != null)
+                {
+                    sfvg.Lvl.Width = n - 2;
+                    sfvg.Area.Width = n - 2;
+                }
+            }
+            else if (sesr != null)
+            {
+                SetRange(sesr);
+
+                // Set range lines color
+                sesr.Max.Color = sfvg.IsBull ? BullCss : BearCss;
+                sesr.Min.Color = sfvg.IsBull ? BullCss : BearCss;
+            }
+
+            //-----------------------------------------------------------------------------}
+            // Set FVG
+            //-----------------------------------------------------------------------------{
+            // New session bullish FVG
+            var c2 = GetCandle(2);
+            if (bullFVG && sfvg.IsNew)
+            {
+                sfvg = new FVG((float)c.Low, (float)c2.High, false, false, true);
+                SetFVG(sfvg, 2 , BullAreaCss, BullCss);
+
+                bullIsNew = true;
+            }
+
+            // New session bearish FVG
+            else if (bearFVG && sfvg.IsNew)
+            {
+                sfvg = new FVG((float)c2.Low, (float)c.High, false, false, false);
+                SetFVG(sfvg,2, BearAreaCss, BearCss);
+
+                bearIsNew = true;
+            }
+
+            // Change object transparencies if mitigated
+            if (!sfvg.Mitigated)
+            {
+                // If session FVG is bullish
+                if (sfvg.IsBull && (float)c.Close < sfvg.Bottom)
+                {
+                    SetFVG(sfvg,1, BullMitigatedCss, BullCss);
+
+                    sfvg.Mitigated = true;
+                    bullMitigated = true;
+                }
+                // If session FVG is bearish
+                else if (!sfvg.IsBull && (float)c.Close > sfvg.Top)
+                {
+                    SetFVG(sfvg, 1, BearMitigatedCss, BearCss);
+
+                    sfvg.Mitigated = true;
+                    bearMitigated = true;
+                }
+            }
+
+            // Set FVG right coordinates to current bar
+            if (!sfvg.IsNew)
+            {
+                sfvg.Lvl.Width = n;
+                sfvg.Area.Width = (n);
+            }
+            // On new session fvg
+            if (bullIsNew)
+                AddAlert("Bullish FVG", "New session bullish fvg");
+
+            if (bearIsNew)
+                AddAlert("Bearish FVG", "New session bearish fvg");
+
+            // On fvg mitigation
+            if (bullMitigated)
+                AddAlert("Mitigated Bullish FVG", "Session bullish fvg has been mitigated");
+
+            if (bearMitigated)
+                AddAlert("Mitigated Bearish FVG", "Session bearish fvg has been mitigated");
+
+            // If within fvg
+            if ((float)c.Close >= sfvg.Bottom && (float)c.Close <= sfvg.Top && sfvg.IsBull && !sfvg.IsNew)
+                AddAlert("Price Within Bullish FVG", "Price is within bullish fvg");
+
+            if ((float)c.Close >= sfvg.Bottom && (float)c.Close <= sfvg.Top && !sfvg.IsBull && !sfvg.IsNew)
+                AddAlert("Price Within Bearish FVG", "Price is within bearish fvg");
+
+            // Calculate the average
+            float average = (sfvg.Top + sfvg.Bottom) / 2;
+            var c1 = GetCandle(1);
+            // On fvg average cross
+            bool crossedBullish = ((float)c1.Close < average && (float)c.Close >= average);
+            bool crossedBearish = ((float)c1.Close > average && (float)c.Close <= average);
+
+            if (crossedBullish && sfvg.IsBull && !sfvg.IsNew)
+                AddAlert("Bullish FVG AVG Cross", "Price crossed bullish fvg average");
+
+            if (crossedBearish && !sfvg.IsBull && !sfvg.IsNew)
+                AddAlert("Bearish FVG AVG Cross", "Price crossed bearish fvg average");
 
         }
+
+
+
 
     }
 }
