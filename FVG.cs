@@ -36,11 +36,11 @@ namespace ATAS.Indicators.Technical
         private  SessionRange sesr;
         private  Rectangle Area;
         private  Rectangle avgLine;
-        private Highest High = new Highest();
-        private Lowest Low = new Lowest();
+        //private Highest High = new Highest();
+        //private Lowest Low = new Lowest();
 
-        private  bool bullFVG;
-        private  bool bearFVG;
+        private  bool bullFVG = false;
+        private  bool bearFVG = false;
 
         private  bool bullIsNew = false;
         private  bool bearIsNew = false;
@@ -103,7 +103,6 @@ namespace ATAS.Indicators.Technical
         }
         protected override void OnRender(RenderContext context, DrawingLayouts layout)
         {
-            var candle = GetCandle(0);
 
 
 
@@ -114,7 +113,12 @@ namespace ATAS.Indicators.Technical
         {
             var n = bar; 
             var c = GetCandle(bar);
+            var c1 = GetCandle(1);
+            var c2 = GetCandle(2);
             var candle = GetCandle(bar);
+            bool bullFVG = c.Low > c2.High && c1.Close > c2.High;
+            bool bearFVG = c.High < c2.Low && c1.Close < c2.Low;
+
             void SetFVG(FVG id, int offset, System.Drawing.Color bgCss, System.Drawing.Color lCss)
             {
 
@@ -152,7 +156,7 @@ namespace ATAS.Indicators.Technical
             if (IsNewSession(bar))
             {
 
-                DrawingRectangle f = new DrawingRectangle( n, (int)c.High + (int)InstrumentInfo.TickSize, n, (int)c.Low - (int)InstrumentInfo.TickSize, pen , Brushes.Gray);
+                DrawingRectangle Area = new DrawingRectangle( n, (int)c.High + (int)InstrumentInfo.TickSize, n, (int)c.Low - (int)InstrumentInfo.TickSize, pen , Brushes.Gray);
 
                 // Set new range
                 sesr = new SessionRange
@@ -175,15 +179,14 @@ namespace ATAS.Indicators.Technical
                 SetRange(sesr);
 
                 // Set range lines color
-                sesr.Max.Color = sfvg.IsBull ? BullCss : BearCss;
-                sesr.Min.Color = sfvg.IsBull ? BullCss : BearCss;
+                //sesr.Max.Color = sfvg.IsBull ? BullCss : BearCss;
+                //sesr.Min.Color = sfvg.IsBull ? BullCss : BearCss;
             }
 
             //-----------------------------------------------------------------------------}
             // Set FVG
             //-----------------------------------------------------------------------------{
             // New session bullish FVG
-            var c2 = GetCandle(2);
             if (bullFVG && sfvg.IsNew)
             {
                 sfvg = new FVG((float)c.Low, (float)c2.High, false, false, true);
@@ -251,7 +254,6 @@ namespace ATAS.Indicators.Technical
 
             // Calculate the average
             float average = (sfvg.Top + sfvg.Bottom) / 2;
-            var c1 = GetCandle(1);
             // On fvg average cross
             bool crossedBullish = ((float)c1.Close < average && (float)c.Close >= average);
             bool crossedBearish = ((float)c1.Close > average && (float)c.Close <= average);
