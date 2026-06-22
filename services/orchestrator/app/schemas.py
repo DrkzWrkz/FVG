@@ -373,6 +373,20 @@ class SplitSheetLineItem(BaseModel):
     contact_email: str | None = None
 
 
+class CopyrightChecklistInput(BaseModel):
+    has_human_written_lyrics: bool = True
+    has_human_composed_melody: bool = True
+    has_human_arranged_structure: bool = True
+    ai_generated_lyrics: bool = False
+    ai_generated_melody: bool = False
+    ai_generated_master_audio: bool = False
+    ai_generated_artwork: bool = False
+    human_edited_ai_material: bool = False
+    source_material_rights_cleared: bool = True
+    contributor_agreements_collected: bool = True
+    splits_confirmed_by_all_parties: bool = False
+
+
 class LegalRoyaltyRequest(BaseModel):
     artist_name: str
     track_title: str
@@ -384,6 +398,7 @@ class LegalRoyaltyRequest(BaseModel):
     advance_amount: Decimal = Decimal("0.00")
     prior_unrecouped_balance: Decimal = Decimal("0.00")
     recoupment_rate: Decimal = Field(default=Decimal("1.00000"), ge=0, le=1)
+    copyright_checklist: CopyrightChecklistInput = Field(default_factory=CopyrightChecklistInput)
     persist_state: bool = False
     thread_id: str | None = None
 
@@ -433,6 +448,39 @@ class RecoupmentModel(BaseModel):
     participant_payouts: list[ParticipantRecoupmentPayout]
 
 
+class CopyrightChecklistFinding(BaseModel):
+    criterion: str
+    passed: bool
+    severity: str
+    message: str
+
+
+class CopyrightEligibilityAnalysis(BaseModel):
+    eligibility_status: str
+    requires_human_review: bool
+    ai_disclosure_required: bool
+    checklist_findings: list[CopyrightChecklistFinding]
+    filing_guidance: list[str]
+
+
+class LegalApprovalCheckpointRequest(BaseModel):
+    decision: str
+    reviewer_name: str
+    reviewer_role: str
+    notes: str
+
+
+class LegalApprovalCheckpointResponse(BaseModel):
+    state_id: UUID
+    thread_id: str
+    previous_status: str
+    new_status: str
+    reviewer_name: str
+    reviewer_role: str
+    notes: str
+    recorded_at: datetime
+
+
 class LegalRoyaltyResponse(BaseModel):
     thread_id: str
     state_id: UUID | None = None
@@ -443,4 +491,5 @@ class LegalRoyaltyResponse(BaseModel):
     legal_summary: str
     split_sheet_analysis: SplitSheetAnalysis
     recoupment_model: RecoupmentModel
+    copyright_eligibility: CopyrightEligibilityAnalysis
     generated_at: datetime

@@ -317,6 +317,19 @@ def test_legal_royalty_workflow_models_recoupment_and_flags_review():
                 "advance_amount": "2000.00",
                 "prior_unrecouped_balance": "1000.00",
                 "recoupment_rate": "0.50000",
+                "copyright_checklist": {
+                    "has_human_written_lyrics": True,
+                    "has_human_composed_melody": True,
+                    "has_human_arranged_structure": True,
+                    "ai_generated_lyrics": True,
+                    "ai_generated_melody": False,
+                    "ai_generated_master_audio": False,
+                    "ai_generated_artwork": True,
+                    "human_edited_ai_material": True,
+                    "source_material_rights_cleared": True,
+                    "contributor_agreements_collected": False,
+                    "splits_confirmed_by_all_parties": False
+                },
                 "persist_state": True
             }
         )
@@ -325,15 +338,29 @@ def test_legal_royalty_workflow_models_recoupment_and_flags_review():
         payload = response.json()
         assert payload["requires_human_review"] is True
         assert payload["split_sheet_analysis"]["duplicate_parties"] == ["Nova Bloom"]
+        assert payload["copyright_eligibility"]["eligibility_status"] == "eligible-with-limitations"
+        assert payload["copyright_eligibility"]["ai_disclosure_required"] is True
         assert payload["recoupment_model"]["distribution_fee_amount"] == "1000.00"
         assert payload["recoupment_model"]["royalty_pool_amount"] == "7200.00"
         assert payload["recoupment_model"]["recoupment_withheld"] == "3000.00"
         assert payload["recoupment_model"]["remaining_unrecouped_balance"] == "0.00"
         assert payload["state_id"] is not None
 
+        checkpoint_response = client.post(
+            f"/api/v1/agents/legal-royalty/threads/{payload['thread_id']}/checkpoint",
+            json={
+                "decision": "approved",
+                "reviewer_name": "Casey Morgan",
+                "reviewer_role": "Label Counsel",
+                "notes": "Reviewed AI disclosure language and approved for filing prep."
+            }
+        )
+        assert checkpoint_response.status_code == 200
+        assert checkpoint_response.json()["new_status"] == "approved"
+
         thread_response = client.get(
             f"/api/v1/agents/legal-royalty/threads/{payload['thread_id']}"
         )
         assert thread_response.status_code == 200
         assert thread_response.json()["agent_name"] == "legal-royalty"
-        assert thread_response.json()["state_status"] == "human-review-required"
+        assert thread_response.json()["state_status"] == "approved"

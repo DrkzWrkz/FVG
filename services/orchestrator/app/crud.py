@@ -181,6 +181,45 @@ def get_latest_output_payload(state: AgentState) -> Any | None:
     return None
 
 
+def append_agent_state_checkpoint(
+    db: Session,
+    state: AgentState,
+    *,
+    payload: dict[str, Any],
+    new_status: str,
+    tool_name: str = "human-approval-checkpoint"
+) -> AgentState:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    checkpoint_event = {
+        "timestamp": timestamp,
+        "direction": "checkpoint",
+        "payload": jsonable_encoder(payload)
+    }
+    graph_event = {
+        "timestamp": timestamp,
+        "step": tool_name,
+        "status": new_status,
+        "thread_id": state.thread_id
+    }
+    tool_log = {
+        "timestamp": timestamp,
+        "tool": tool_name,
+        "status": new_status,
+        "agent_name": state.agent_name
+    }
+
+    state.conversation_thread = [*(state.conversation_thread or []), checkpoint_event]
+    state.graph_history = [*(state.graph_history or []), graph_event]
+    state.tool_execution_logs = [*(state.tool_execution_logs or []), tool_log]
+    state.state_status = new_status
+
+    return save_record(
+        db,
+        state,
+        conflict_message=f"Unable to append checkpoint for {state.agent_name}."
+    )
+
+
 def persist_agent_workflow_state(
     db: Session,
     *,

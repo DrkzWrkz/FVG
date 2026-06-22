@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Calculator,
+  CheckCircle2,
   Gavel,
   Loader2,
   Plus,
   ReceiptText,
   Scale,
+  ShieldCheck,
   Trash2
 } from "lucide-react";
 
@@ -21,6 +23,8 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import type {
+  CopyrightChecklistInput,
+  LegalApprovalCheckpointResponse,
   LegalRoyaltyResponse,
   SplitSheetLineItem
 } from "@/lib/agent-types";
@@ -60,6 +64,20 @@ export function LegalRoyaltyPanel() {
   const [recoupmentRate, setRecoupmentRate] = useState("0.50000");
   const [persistState, setPersistState] = useState(true);
   const [threadId, setThreadId] = useState("");
+  const [copyrightChecklist, setCopyrightChecklist] =
+    useState<CopyrightChecklistInput>({
+      has_human_written_lyrics: true,
+      has_human_composed_melody: true,
+      has_human_arranged_structure: true,
+      ai_generated_lyrics: true,
+      ai_generated_melody: false,
+      ai_generated_master_audio: false,
+      ai_generated_artwork: true,
+      human_edited_ai_material: true,
+      source_material_rights_cleared: true,
+      contributor_agreements_collected: false,
+      splits_confirmed_by_all_parties: false
+    });
   const [splitSheet, setSplitSheet] = useState<SplitSheetLineItem[]>([
     createSplitLine({
       party_name: "Nova Bloom",
@@ -84,8 +102,16 @@ export function LegalRoyaltyPanel() {
     })
   ]);
   const [result, setResult] = useState<LegalRoyaltyResponse | null>(null);
+  const [approvalResult, setApprovalResult] = useState<LegalApprovalCheckpointResponse | null>(null);
+  const [reviewerName, setReviewerName] = useState("Casey Morgan");
+  const [reviewerRole, setReviewerRole] = useState("Label Counsel");
+  const [reviewerNotes, setReviewerNotes] = useState(
+    "Reviewed copyright checklist and payout waterfall."
+  );
   const [error, setError] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isApplyingCheckpoint, setIsApplyingCheckpoint] = useState(false);
 
   const declaredTotal = useMemo(
     () =>
@@ -116,6 +142,67 @@ export function LegalRoyaltyPanel() {
     },
     { label: "Recoupment rate", value: recoupmentRate, setValue: setRecoupmentRate }
   ];
+  const checklistFields: Array<{
+    key: keyof CopyrightChecklistInput;
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: "has_human_written_lyrics",
+      label: "Human-written lyrics",
+      description: "Lyrics contain qualifying human-authored expression."
+    },
+    {
+      key: "has_human_composed_melody",
+      label: "Human-composed melody",
+      description: "Melodic composition originates from a human contributor."
+    },
+    {
+      key: "has_human_arranged_structure",
+      label: "Human-arranged structure",
+      description: "Arrangement, sequence, or structure was creatively shaped by a human."
+    },
+    {
+      key: "ai_generated_lyrics",
+      label: "AI-generated lyrics involved",
+      description: "Language model or text generation contributed lyrical content."
+    },
+    {
+      key: "ai_generated_melody",
+      label: "AI-generated melody involved",
+      description: "Generative tooling contributed melodic material."
+    },
+    {
+      key: "ai_generated_master_audio",
+      label: "AI-generated master audio involved",
+      description: "The sound recording includes machine-generated audio output."
+    },
+    {
+      key: "ai_generated_artwork",
+      label: "AI-generated artwork involved",
+      description: "Artwork or key campaign visuals include AI-generated elements."
+    },
+    {
+      key: "human_edited_ai_material",
+      label: "Human edited AI material",
+      description: "Humans materially curated, edited, or transformed AI-assisted output."
+    },
+    {
+      key: "source_material_rights_cleared",
+      label: "Source rights cleared",
+      description: "Samples, interpolations, or underlying works are documented as cleared."
+    },
+    {
+      key: "contributor_agreements_collected",
+      label: "Contributor agreements collected",
+      description: "All contributors have signed supporting agreements or deal memos."
+    },
+    {
+      key: "splits_confirmed_by_all_parties",
+      label: "Splits confirmed by all parties",
+      description: "Every party has explicitly confirmed the split allocations."
+    }
+  ];
 
   const updateLineItem = <K extends keyof SplitSheetLineItem>(
     index: number,
@@ -127,6 +214,16 @@ export function LegalRoyaltyPanel() {
         lineIndex === index ? { ...line, [key]: value } : line
       )
     );
+  };
+
+  const updateChecklistField = (
+    key: keyof CopyrightChecklistInput,
+    value: boolean
+  ) => {
+    setCopyrightChecklist((current) => ({
+      ...current,
+      [key]: value
+    }));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -151,17 +248,48 @@ export function LegalRoyaltyPanel() {
           advance_amount: advanceAmount,
           prior_unrecouped_balance: priorUnrecoupedBalance,
           recoupment_rate: recoupmentRate,
+          copyright_checklist: copyrightChecklist,
           persist_state: persistState,
           thread_id: threadId.trim() || null
         }
       );
 
       setResult(response);
+      setApprovalResult(null);
       setThreadId(response.thread_id);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Unknown error.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const applyCheckpoint = async (decision: "approved" | "needs-revision" | "rejected") => {
+    if (!result?.thread_id) {
+      return;
+    }
+
+    setApprovalError(null);
+    setIsApplyingCheckpoint(true);
+
+    try {
+      const response = await postToOrchestrator<LegalApprovalCheckpointResponse, object>(
+        `/api/v1/agents/legal-royalty/threads/${result.thread_id}/checkpoint`,
+        {
+          decision,
+          reviewer_name: reviewerName,
+          reviewer_role: reviewerRole,
+          notes: reviewerNotes
+        }
+      );
+
+      setApprovalResult(response);
+    } catch (checkpointError) {
+      setApprovalError(
+        checkpointError instanceof Error ? checkpointError.message : "Unknown checkpoint error."
+      );
+    } finally {
+      setIsApplyingCheckpoint(false);
     }
   };
 
@@ -318,6 +446,31 @@ export function LegalRoyaltyPanel() {
             </div>
           </div>
 
+          <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+            <div className="flex items-center gap-2 text-sm font-medium text-white">
+              <ShieldCheck className="h-4 w-4 text-emerald-300" />
+              Copyright eligibility checklist
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              {checklistFields.map(({ key, label, description }) => (
+                <label
+                  key={key}
+                  className="flex gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={copyrightChecklist[key]}
+                    onChange={(event) => updateChecklistField(key, event.target.checked)}
+                  />
+                  <div>
+                    <p className="font-medium text-white">{label}</p>
+                    <p className="mt-1 text-sm text-slate-400">{description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <label className="flex items-center gap-3 rounded-3xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-200">
             <input
               type="checkbox"
@@ -369,6 +522,154 @@ export function LegalRoyaltyPanel() {
                 Legal summary
               </p>
               <p className="mt-3 text-base leading-7 text-white">{result.legal_summary}</p>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-5">
+              <div className="flex items-center gap-2 text-sm font-medium text-white">
+                <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                Copyright eligibility
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Eligibility status</p>
+                  <p className="mt-2 text-sm font-medium text-white">
+                    {result.copyright_eligibility.eligibility_status}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">AI disclosure</p>
+                  <p className="mt-2 text-sm font-medium text-white">
+                    {result.copyright_eligibility.ai_disclosure_required ? "Required" : "Not required"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Human review</p>
+                  <p className="mt-2 text-sm font-medium text-white">
+                    {result.copyright_eligibility.requires_human_review ? "Required" : "Not required"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-5 xl:grid-cols-2">
+                <div className="space-y-3">
+                  {result.copyright_eligibility.checklist_findings.map((finding) => (
+                    <div
+                      key={finding.criterion}
+                      className="rounded-2xl border border-white/10 bg-slate-950/40 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        {finding.passed ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-300" />
+                        ) : (
+                          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-300" />
+                        )}
+                        <div>
+                          <p className="text-sm font-medium text-white">{finding.criterion}</p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+                            {finding.severity}
+                          </p>
+                          <p className="mt-2 text-sm text-slate-300">{finding.message}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-sm font-medium text-white">Filing guidance</p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                    {result.copyright_eligibility.filing_guidance.map((guidance) => (
+                      <li key={guidance} className="flex gap-2">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-300" />
+                        <span>{guidance}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-5">
+              <div className="flex items-center gap-2 text-sm font-medium text-white">
+                <Gavel className="h-4 w-4 text-emerald-300" />
+                Human approval checkpoint
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <label className="space-y-2">
+                  <span className={labelClassName}>Reviewer name</span>
+                  <input
+                    className={fieldClassName}
+                    value={reviewerName}
+                    onChange={(event) => setReviewerName(event.target.value)}
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className={labelClassName}>Reviewer role</span>
+                  <input
+                    className={fieldClassName}
+                    value={reviewerRole}
+                    onChange={(event) => setReviewerRole(event.target.value)}
+                  />
+                </label>
+                <label className="space-y-2 xl:col-span-1 md:col-span-2">
+                  <span className={labelClassName}>Checkpoint notes</span>
+                  <input
+                    className={fieldClassName}
+                    value={reviewerNotes}
+                    onChange={(event) => setReviewerNotes(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void applyCheckpoint("approved")}
+                  disabled={isApplyingCheckpoint || !result.state_id}
+                >
+                  {isApplyingCheckpoint ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Approve checkpoint
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void applyCheckpoint("needs-revision")}
+                  disabled={isApplyingCheckpoint || !result.state_id}
+                >
+                  Needs revision
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void applyCheckpoint("rejected")}
+                  disabled={isApplyingCheckpoint || !result.state_id}
+                >
+                  Reject
+                </Button>
+              </div>
+
+              {approvalError ? (
+                <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                  {approvalError}
+                </div>
+              ) : null}
+
+              {approvalResult ? (
+                <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                  <p className="text-sm font-medium text-white">
+                    Approval recorded: {approvalResult.previous_status} → {approvalResult.new_status}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-200">
+                    {approvalResult.reviewer_name} ({approvalResult.reviewer_role}) at{" "}
+                    {new Date(approvalResult.recorded_at).toLocaleString()}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">{approvalResult.notes}</p>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-400">
+                  Persist the workflow state to enable approval checkpoint actions.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">

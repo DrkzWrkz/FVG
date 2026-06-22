@@ -14,6 +14,7 @@ from agents.virtual_manager import build_release_strategy
 from config import settings
 from crud import (
     apply_updates,
+    append_agent_state_checkpoint,
     delete_record,
     ensure_artist_exists,
     ensure_track_exists,
@@ -45,6 +46,8 @@ from schemas import (
     DiscoveryScanRequest,
     DiscoveryScanResponse,
     HealthResponse,
+    LegalApprovalCheckpointRequest,
+    LegalApprovalCheckpointResponse,
     LegalRoyaltyRequest,
     LegalRoyaltyResponse,
     MarketingCrewRequest,
@@ -634,3 +637,59 @@ def get_legal_royalty_thread(thread_id: str, db: Session = Depends(get_db)) -> A
     if state is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
     return state
+
+
+@app.post(
+    f"{settings.api_prefix}/agents/legal-royalty/threads/{{thread_id}}/checkpoint",
+    response_model=LegalApprovalCheckpointResponse,
+    tags=["agents"]
+)
+def apply_legal_approval_checkpoint(
+    thread_id: str,
+    payload: LegalApprovalCheckpointRequest,
+    db: Session = Depends(get_db)
+) -> LegalApprovalCheckpointResponse:
+    state = get_agent_state_by_thread(db, agent_name="legal-royalty", thread_id=thread_id)
+    if state is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
+
+    decision_map = {
+        "approved": "approved",
+        "needs-revision": "needs-revision",
+        "rejected": "rejected"
+    }
+    normalized_decision = payload.decision.strip().lower()
+    if normalized_decision not in decision_map:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Decision must be one of: approved, needs-revision, rejected."
+        )
+
+    previous_status = state.state_status
+    new_status = decision_map[normalized_decision]
+    recorded_at = datetime.now(timezone.utc)
+
+    append_agent_state_checkpoint(
+        db,
+        state,
+        payload={
+            "decision": normalized_decision,
+            "reviewer_name": payload.reviewer_name,
+            "reviewer_role": payload.reviewer_role,
+            "notes": payload.notes,
+            "previous_status": previous_status,
+            "recorded_at": recorded_at.isoformat()
+        },
+        new_status=new_status
+    )
+
+    return LegalApprovalCheckpointResponse(
+        state_id=state.id,
+        thread_id=state.thread_id,
+        previous_status=previous_status,
+        new_status=new_status,
+        reviewer_name=payload.reviewer_name,
+        reviewer_role=payload.reviewer_role,
+        notes=payload.notes,
+        recorded_at=recorded_at
+    )

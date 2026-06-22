@@ -237,6 +237,20 @@ export interface SplitSheetLineItem {
   contact_email: string | null;
 }
 
+export interface CopyrightChecklistInput {
+  has_human_written_lyrics: boolean;
+  has_human_composed_melody: boolean;
+  has_human_arranged_structure: boolean;
+  ai_generated_lyrics: boolean;
+  ai_generated_melody: boolean;
+  ai_generated_master_audio: boolean;
+  ai_generated_artwork: boolean;
+  human_edited_ai_material: boolean;
+  source_material_rights_cleared: boolean;
+  contributor_agreements_collected: boolean;
+  splits_confirmed_by_all_parties: boolean;
+}
+
 export interface LegalRoyaltyRequest {
   artist_name: string;
   track_title: string;
@@ -248,6 +262,7 @@ export interface LegalRoyaltyRequest {
   advance_amount: string;
   prior_unrecouped_balance: string;
   recoupment_rate: string;
+  copyright_checklist: CopyrightChecklistInput;
   persist_state: boolean;
   thread_id?: string | null;
 }
@@ -297,6 +312,39 @@ export interface RecoupmentModel {
   participant_payouts: ParticipantRecoupmentPayout[];
 }
 
+export interface CopyrightChecklistFinding {
+  criterion: string;
+  passed: boolean;
+  severity: string;
+  message: string;
+}
+
+export interface CopyrightEligibilityAnalysis {
+  eligibility_status: string;
+  requires_human_review: boolean;
+  ai_disclosure_required: boolean;
+  checklist_findings: CopyrightChecklistFinding[];
+  filing_guidance: string[];
+}
+
+export interface LegalApprovalCheckpointRequest {
+  decision: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  notes: string;
+}
+
+export interface LegalApprovalCheckpointResponse {
+  state_id: string;
+  thread_id: string;
+  previous_status: string;
+  new_status: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  notes: string;
+  recorded_at: string;
+}
+
 export interface LegalRoyaltyResponse {
   thread_id: string;
   state_id: string | null;
@@ -307,5 +355,6 @@ export interface LegalRoyaltyResponse {
   legal_summary: string;
   split_sheet_analysis: SplitSheetAnalysis;
   recoupment_model: RecoupmentModel;
+  copyright_eligibility: CopyrightEligibilityAnalysis;
   generated_at: string;
 }

@@ -28,7 +28,11 @@ const agentOptions = [
 const statusOptions = [
   { value: "all", label: "All states" },
   { value: "completed", label: "Completed" },
-  { value: "initialized", label: "Initialized" }
+  { value: "initialized", label: "Initialized" },
+  { value: "human-review-required", label: "Human review required" },
+  { value: "approved", label: "Approved" },
+  { value: "needs-revision", label: "Needs revision" },
+  { value: "rejected", label: "Rejected" }
 ];
 
 function formatJson(value: unknown) {
