@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ArrowRight,
   BadgeCheck,
   Database,
   Megaphone,
@@ -69,7 +70,7 @@ export default function HomePage() {
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200">
             <Sparkles className="h-4 w-4" />
-            Foundation scaffold initialized
+            Foundation and dashboard workflows initialized
           </div>
           <div className="space-y-4">
             <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
@@ -82,6 +83,12 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg">
+              <Link href="/dashboard">
+                Open agent dashboard
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg">
               <Link href="/api/health">Inspect frontend health route</Link>
             </Button>
             <Button asChild variant="secondary" size="lg">
@@ -111,6 +118,10 @@ export default function HomePage() {
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="font-medium text-white">Implementation posture</p>
               <p className="mt-2">LLM-facing orchestration is separated from deterministic contract and royalty logic.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="font-medium text-white">Live workflows</p>
+              <p className="mt-2">A&R Discovery and Virtual Manager are now wired into a usable frontend dashboard.</p>
             </div>
           </CardContent>
         </Card>
