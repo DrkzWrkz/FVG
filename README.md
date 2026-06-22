@@ -87,7 +87,7 @@ The FastAPI service exposes the first foundational entry points:
 
 ```bash
 npm install
-python -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
