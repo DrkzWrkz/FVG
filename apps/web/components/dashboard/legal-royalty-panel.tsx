@@ -170,6 +170,21 @@ function normalizeChecklist(value: unknown): CopyrightChecklistInput {
   };
 }
 
+function isLegalDocumentIngestionPayload(
+  value: unknown
+): value is LegalDocumentIngestionResponse {
+  return (
+    isRecord(value) &&
+    "extracted_data" in value &&
+    isRecord(value.extracted_data) &&
+    "source_name" in value
+  );
+}
+
+function isLegalRoyaltyPayload(value: unknown): value is LegalRoyaltyResponse {
+  return isRecord(value) && "legal_summary" in value && "recoupment_model" in value;
+}
+
 export function LegalRoyaltyPanel() {
   const [artistName, setArtistName] = useState("Nova Bloom");
   const [trackTitle, setTrackTitle] = useState("Midnight Relay");
@@ -426,38 +441,50 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
       .reverse()
       .find((event) => event.direction === "checkpoint");
 
-    if (isRecord(latestInputEvent?.payload)) {
-      const payload = latestInputEvent.payload;
-      applyExtractedDraft(
-        {
-          artist_name: asString(payload.artist_name, artistName),
-          track_title: asString(payload.track_title, trackTitle),
-          contract_reference: asString(payload.contract_reference),
-          split_sheet: normalizeSplitSheet(payload.split_sheet),
-          gross_revenue: asString(payload.gross_revenue, grossRevenue),
-          royalty_pool_rate: asString(payload.royalty_pool_rate, royaltyPoolRate),
-          distribution_fee_rate: asString(payload.distribution_fee_rate, distributionFeeRate),
-          advance_amount: asString(payload.advance_amount, advanceAmount),
-          prior_unrecouped_balance: asString(
-            payload.prior_unrecouped_balance,
-            priorUnrecoupedBalance
-          ),
-          recoupment_rate: asString(payload.recoupment_rate, recoupmentRate),
-          copyright_checklist: normalizeChecklist(payload.copyright_checklist)
-        },
-        state.thread_id
-      );
-      setPersistState(asBoolean(payload.persist_state, true));
-    }
-
-    if (isRecord(latestOutputEvent?.payload)) {
-      const outputPayload = latestOutputEvent.payload as unknown as LegalRoyaltyResponse;
-      setResult({
+    if (isLegalDocumentIngestionPayload(latestOutputEvent?.payload)) {
+      const outputPayload = latestOutputEvent.payload;
+      setIngestionResult({
         ...outputPayload,
         state_id: state.id
       });
-    } else {
+      applyExtractedDraft(outputPayload.extracted_data, state.thread_id);
       setResult(null);
+      setPersistState(true);
+    } else {
+      if (isRecord(latestInputEvent?.payload)) {
+        const payload = latestInputEvent.payload;
+        applyExtractedDraft(
+          {
+            artist_name: asString(payload.artist_name, artistName),
+            track_title: asString(payload.track_title, trackTitle),
+            contract_reference: asString(payload.contract_reference),
+            split_sheet: normalizeSplitSheet(payload.split_sheet),
+            gross_revenue: asString(payload.gross_revenue, grossRevenue),
+            royalty_pool_rate: asString(payload.royalty_pool_rate, royaltyPoolRate),
+            distribution_fee_rate: asString(payload.distribution_fee_rate, distributionFeeRate),
+            advance_amount: asString(payload.advance_amount, advanceAmount),
+            prior_unrecouped_balance: asString(
+              payload.prior_unrecouped_balance,
+              priorUnrecoupedBalance
+            ),
+            recoupment_rate: asString(payload.recoupment_rate, recoupmentRate),
+            copyright_checklist: normalizeChecklist(payload.copyright_checklist)
+          },
+          state.thread_id
+        );
+        setPersistState(asBoolean(payload.persist_state, true));
+      }
+
+      if (isLegalRoyaltyPayload(latestOutputEvent?.payload)) {
+        const outputPayload = latestOutputEvent.payload;
+        setResult({
+          ...outputPayload,
+          state_id: state.id
+        });
+      } else {
+        setResult(null);
+      }
+      setIngestionResult(null);
     }
 
     if (isRecord(latestCheckpointEvent?.payload)) {
@@ -486,6 +513,7 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
     setCurrentReviewStatus(state.state_status);
     setApprovalError(null);
     setError(null);
+    setLoadError(null);
   };
 
   const loadPersistedThread = async (requestedThreadId: string) => {
@@ -529,6 +557,7 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
       if (threadId.trim()) {
         formData.append("thread_id", threadId.trim());
       }
+      formData.append("persist_state", persistState ? "true" : "false");
       if (documentFile) {
         formData.append("file", documentFile);
       }
@@ -540,6 +569,7 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
 
       setIngestionResult(response);
       applyExtractedDraft(response.extracted_data, response.thread_id);
+      setCurrentReviewStatus(response.state_id ? "pre-review" : null);
     } catch (ingestError) {
       setIngestionError(
         ingestError instanceof Error ? ingestError.message : "Unknown ingestion error."
@@ -784,6 +814,9 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
                   </p>
                   <p className="mt-2 text-sm text-slate-200">
                     Thread ID: {ingestionResult.thread_id}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-200">
+                    Persisted state: {ingestionResult.state_id ?? "Not persisted"}
                   </p>
                   <p className="mt-2 text-sm text-slate-300">
                     {ingestionResult.requires_human_review

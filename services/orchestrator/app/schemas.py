@@ -495,8 +495,16 @@ class LegalDocumentExtractionData(BaseModel):
     copyright_checklist: CopyrightChecklistInput
 
 
+class LegalDocumentIngestionAuditPayload(BaseModel):
+    source_name: str
+    thread_id: str | None = None
+    raw_text_excerpt: str
+    persist_state: bool = False
+
+
 class LegalDocumentIngestionResponse(BaseModel):
     thread_id: str
+    state_id: UUID | None = None
     source_name: str
     extracted_data: LegalDocumentExtractionData
     extraction_issues: list[str]

@@ -286,6 +286,7 @@ def test_legal_document_ingestion_extracts_contract_fields():
             "/api/v1/agents/legal-royalty/ingest-document",
             data={
                 "thread_id": "legal-royalty-demo-thread",
+                "persist_state": "true",
                 "raw_text": """
 Artist: Nova Bloom
 Track: Midnight Relay
@@ -324,7 +325,21 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com
         assert payload["extracted_data"]["royalty_pool_rate"] == "0.80000"
         assert len(payload["extracted_data"]["split_sheet"]) == 3
         assert payload["extracted_data"]["copyright_checklist"]["ai_generated_lyrics"] is True
+        assert payload["state_id"] is not None
         assert payload["requires_human_review"] is False
+
+        thread_response = client.get(
+            "/api/v1/agents/legal-royalty/threads/legal-royalty-demo-thread"
+        )
+        assert thread_response.status_code == 200
+        assert thread_response.json()["state_status"] == "pre-review"
+
+        history_response = client.get(
+            "/api/v1/agents/history",
+            params={"agent_name": "legal-royalty", "state_status": "pre-review"}
+        )
+        assert history_response.status_code == 200
+        assert len(history_response.json()) == 1
 
 
 def test_legal_royalty_workflow_models_recoupment_and_flags_review():

@@ -29,6 +29,7 @@ const statusOptions = [
   { value: "all", label: "All states" },
   { value: "completed", label: "Completed" },
   { value: "initialized", label: "Initialized" },
+  { value: "pre-review", label: "Pre-review" },
   { value: "human-review-required", label: "Human review required" },
   { value: "approved", label: "Approved" },
   { value: "needs-revision", label: "Needs revision" },

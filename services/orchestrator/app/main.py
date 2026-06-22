@@ -48,6 +48,7 @@ from schemas import (
     HealthResponse,
     LegalApprovalCheckpointRequest,
     LegalApprovalCheckpointResponse,
+    LegalDocumentIngestionAuditPayload,
     LegalDocumentIngestionResponse,
     LegalRoyaltyRequest,
     LegalRoyaltyResponse,
@@ -648,7 +649,9 @@ def get_legal_royalty_thread(thread_id: str, db: Session = Depends(get_db)) -> A
 async def ingest_legal_document(
     raw_text: str | None = Form(default=None),
     thread_id: str | None = Form(default=None),
-    file: UploadFile | None = File(default=None)
+    persist_state: bool = Form(default=False),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db)
 ) -> LegalDocumentIngestionResponse:
     document_text = (raw_text or "").strip()
     source_name = "pasted-raw-text"
@@ -672,11 +675,32 @@ async def ingest_legal_document(
             detail="Provide either raw_text or an uploaded text file for ingestion."
         )
 
-    return run_legal_document_ingestion(
+    result = run_legal_document_ingestion(
         raw_text=document_text,
         source_name=source_name,
         thread_id=thread_id
     )
+
+    if persist_state:
+        ingestion_payload = LegalDocumentIngestionAuditPayload(
+            source_name=source_name,
+            thread_id=thread_id,
+            raw_text_excerpt=document_text[:2000],
+            persist_state=True
+        )
+        state = persist_agent_workflow_state(
+            db,
+            agent_name="legal-royalty",
+            thread_id=result.thread_id,
+            entity_type="legal-document-ingestion",
+            payload=ingestion_payload,
+            result=result,
+            tool_name="split-sheet-parser",
+            state_status="pre-review"
+        )
+        result.state_id = state.id
+
+    return result
 
 
 @app.post(
