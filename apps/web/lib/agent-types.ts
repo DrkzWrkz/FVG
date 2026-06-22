@@ -361,6 +361,7 @@ export interface LegalDocumentExtractionData {
 
 export interface LegalDocumentIngestionResponse {
   thread_id: string;
+  state_id: string | null;
   source_name: string;
   extracted_data: LegalDocumentExtractionData;
   extraction_issues: string[];
