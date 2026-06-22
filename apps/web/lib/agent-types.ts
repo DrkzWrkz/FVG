@@ -228,3 +228,84 @@ export interface AgentStateHistorySummary {
   latest_tool: string | null;
   latest_output_preview: unknown;
 }
+
+export interface SplitSheetLineItem {
+  party_name: string;
+  role: string;
+  ownership_percent: string;
+  recoupable: boolean;
+  contact_email: string | null;
+}
+
+export interface LegalRoyaltyRequest {
+  artist_name: string;
+  track_title: string;
+  contract_reference?: string | null;
+  split_sheet: SplitSheetLineItem[];
+  gross_revenue: string;
+  royalty_pool_rate: string;
+  distribution_fee_rate: string;
+  advance_amount: string;
+  prior_unrecouped_balance: string;
+  recoupment_rate: string;
+  persist_state: boolean;
+  thread_id?: string | null;
+}
+
+export interface SplitSheetValidationIssue {
+  severity: string;
+  message: string;
+}
+
+export interface NormalizedSplitLineItem {
+  party_name: string;
+  role: string;
+  declared_ownership_percent: string;
+  normalized_ownership_percent: string;
+  recoupable: boolean;
+  contact_email: string | null;
+}
+
+export interface SplitSheetAnalysis {
+  total_declared_percent: string;
+  normalized_split_sheet: NormalizedSplitLineItem[];
+  duplicate_parties: string[];
+  validation_issues: SplitSheetValidationIssue[];
+  requires_human_review: boolean;
+  recoupable_party_count: number;
+}
+
+export interface ParticipantRecoupmentPayout {
+  party_name: string;
+  role: string;
+  ownership_percent: string;
+  pre_recoupment_amount: string;
+  recoupment_withheld_amount: string;
+  payout_amount: string;
+  recoupable: boolean;
+}
+
+export interface RecoupmentModel {
+  gross_revenue: string;
+  distribution_fee_amount: string;
+  net_receipts: string;
+  royalty_pool_amount: string;
+  total_recoupable_balance: string;
+  recoupment_withheld: string;
+  remaining_unrecouped_balance: string;
+  total_distributable_amount: string;
+  participant_payouts: ParticipantRecoupmentPayout[];
+}
+
+export interface LegalRoyaltyResponse {
+  thread_id: string;
+  state_id: string | null;
+  artist_name: string;
+  track_title: string;
+  contract_reference: string | null;
+  requires_human_review: boolean;
+  legal_summary: string;
+  split_sheet_analysis: SplitSheetAnalysis;
+  recoupment_model: RecoupmentModel;
+  generated_at: string;
+}

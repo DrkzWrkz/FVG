@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, BarChart3, BrainCircuit, Workflow } from "lucide-react";
 
 import { ArDiscoveryPanel } from "@/components/dashboard/ar-discovery-panel";
+import { LegalRoyaltyPanel } from "@/components/dashboard/legal-royalty-panel";
 import { MarketingPrPanel } from "@/components/dashboard/marketing-pr-panel";
 import { ThreadHistoryPanel } from "@/components/dashboard/thread-history-panel";
 import { VirtualManagerPanel } from "@/components/dashboard/virtual-manager-panel";
@@ -17,8 +18,9 @@ import {
 const dashboardStats = [
   {
     label: "Live workflows",
-    value: "3",
-    description: "A&R Discovery, Virtual Manager, and Marketing & PR Crew are wired to the orchestrator.",
+    value: "4",
+    description:
+      "A&R Discovery, Virtual Manager, Marketing & PR Crew, and Legal & Royalty are wired to the orchestrator.",
     icon: Workflow
   },
   {
@@ -49,9 +51,9 @@ export default function DashboardPage() {
                 Agent Operations Dashboard
               </h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300 sm:text-lg">
-                Run scouting scans, release strategy generation, and a full marketing pipeline
-                directly from the frontend, with typed responses flowing back from the FastAPI
-                orchestration layer.
+                Run scouting scans, release strategy generation, marketing execution, and legal
+                recoupment simulations directly from the frontend, with typed responses flowing
+                back from the FastAPI orchestration layer.
               </p>
             </div>
           </div>
@@ -86,6 +88,7 @@ export default function DashboardPage() {
         <ArDiscoveryPanel />
         <VirtualManagerPanel />
         <MarketingPrPanel />
+        <LegalRoyaltyPanel />
         <ThreadHistoryPanel />
       </section>
     </main>

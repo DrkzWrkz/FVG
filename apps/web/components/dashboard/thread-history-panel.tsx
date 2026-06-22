@@ -21,7 +21,8 @@ const agentOptions = [
   { value: "all", label: "All workflows" },
   { value: "ar-discovery", label: "A&R Discovery" },
   { value: "virtual-manager", label: "Virtual Manager" },
-  { value: "marketing-pr-crew", label: "Marketing & PR Crew" }
+  { value: "marketing-pr-crew", label: "Marketing & PR Crew" },
+  { value: "legal-royalty", label: "Legal & Royalty" }
 ];
 
 const statusOptions = [

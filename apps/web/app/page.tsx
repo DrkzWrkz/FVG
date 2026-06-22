@@ -126,7 +126,7 @@ export default function HomePage() {
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="font-medium text-white">Live workflows</p>
-              <p className="mt-2">A&R Discovery, Virtual Manager, Marketing & PR Crew, and saved thread history are now wired into a usable frontend dashboard.</p>
+              <p className="mt-2">A&R Discovery, Virtual Manager, Marketing & PR Crew, Legal & Royalty simulations, and saved thread history are now wired into a usable frontend dashboard.</p>
             </div>
           </CardContent>
         </Card>
