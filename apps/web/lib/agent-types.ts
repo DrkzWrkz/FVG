@@ -103,3 +103,83 @@ export interface ReleaseStrategyResponse {
   release_timeline: ReleaseWeekPlan[];
   generated_at: string;
 }
+
+export interface MarketingCrewRequest {
+  artist_name: string;
+  track_title: string;
+  genre: string;
+  mood: string;
+  bpm: number;
+  campaign_objective: string;
+  target_audience: string;
+  comparison_artists: string[];
+  differentiators: string[];
+  priority_markets: string[];
+  persist_state: boolean;
+  thread_id?: string | null;
+}
+
+export interface AudienceSegment {
+  name: string;
+  age_range: string;
+  platforms: string[];
+  motivations: string[];
+}
+
+export interface MarketResearchOutput {
+  audience_segments: AudienceSegment[];
+  trending_keywords: string[];
+  regional_priorities: string[];
+  positioning_notes: string[];
+}
+
+export interface PressKitOutput {
+  headline: string;
+  artist_bio: string;
+  press_angle: string;
+  talking_points: string[];
+}
+
+export interface CanvasPromptOutput {
+  visual_direction: string;
+  motion_notes: string[];
+  prompt: string;
+}
+
+export interface SocialCopyOutput {
+  platform: string;
+  hook: string;
+  caption: string;
+  call_to_action: string;
+}
+
+export interface CopywriterOutput {
+  press_kit: PressKitOutput;
+  canvas_prompt: CanvasPromptOutput;
+  social_copy: SocialCopyOutput[];
+}
+
+export interface MediaMatchOutput {
+  outlet_name: string;
+  editor_role: string;
+  beat_focus: string;
+  match_score: number;
+  rationale: string[];
+  outreach_subject: string;
+  outreach_pitch: string;
+}
+
+export interface OutreachPlanOutput {
+  priority_matches: MediaMatchOutput[];
+  sequencing_notes: string[];
+}
+
+export interface MarketingCrewResponse {
+  thread_id: string;
+  state_id: string | null;
+  campaign_brief: string;
+  market_research: MarketResearchOutput;
+  copywriter_output: CopywriterOutput;
+  outreach_plan: OutreachPlanOutput;
+  generated_at: string;
+}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from agents import ORG_CHART
 from agents.ar_discovery import run_discovery_scan
+from agents.marketing_pr import run_marketing_pr_crew
 from agents.virtual_manager import build_release_strategy
 from config import settings
 from crud import (
@@ -40,6 +41,8 @@ from schemas import (
     DiscoveryScanRequest,
     DiscoveryScanResponse,
     HealthResponse,
+    MarketingCrewRequest,
+    MarketingCrewResponse,
     ReleaseStrategyRequest,
     ReleaseStrategyResponse,
     TrackCreate,
@@ -487,6 +490,44 @@ def execute_virtual_manager(
 )
 def get_virtual_manager_thread(thread_id: str, db: Session = Depends(get_db)) -> AgentState:
     state = get_agent_state_by_thread(db, agent_name="virtual-manager", thread_id=thread_id)
+    if state is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
+    return state
+
+
+@app.post(
+    f"{settings.api_prefix}/agents/marketing-pr/launch-campaign",
+    response_model=MarketingCrewResponse,
+    tags=["agents"]
+)
+def execute_marketing_pr_crew(
+    payload: MarketingCrewRequest,
+    db: Session = Depends(get_db)
+) -> MarketingCrewResponse:
+    result = run_marketing_pr_crew(payload)
+
+    if payload.persist_state:
+        state = persist_agent_workflow_state(
+            db,
+            agent_name="marketing-pr-crew",
+            thread_id=result.thread_id,
+            entity_type="marketing-campaign",
+            payload=payload,
+            result=result,
+            tool_name="market-research-agent"
+        )
+        result.state_id = state.id
+
+    return result
+
+
+@app.get(
+    f"{settings.api_prefix}/agents/marketing-pr/threads/{{thread_id}}",
+    response_model=AgentStateRead,
+    tags=["agents"]
+)
+def get_marketing_pr_thread(thread_id: str, db: Session = Depends(get_db)) -> AgentState:
+    state = get_agent_state_by_thread(db, agent_name="marketing-pr-crew", thread_id=thread_id)
     if state is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
     return state

@@ -57,6 +57,9 @@ const apiRoutes = [
   "GET /healthz",
   "GET /api/v1/agents/org-chart",
   "GET /api/v1/foundation/database",
+  "POST /api/v1/agents/ar-discovery/scan",
+  "POST /api/v1/agents/virtual-manager/release-plan",
+  "POST /api/v1/agents/marketing-pr/launch-campaign",
   "POST /api/v1/artists/intake-preview",
   "POST /api/v1/tracks/intake-preview",
   "POST /api/v1/contracts/intake-preview",
@@ -121,7 +124,7 @@ export default function HomePage() {
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="font-medium text-white">Live workflows</p>
-              <p className="mt-2">A&R Discovery and Virtual Manager are now wired into a usable frontend dashboard.</p>
+              <p className="mt-2">A&R Discovery, Virtual Manager, and Marketing & PR Crew are now wired into a usable frontend dashboard.</p>
             </div>
           </CardContent>
         </Card>

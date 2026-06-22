@@ -267,3 +267,83 @@ class ReleaseStrategyResponse(BaseModel):
     campaign_summary: str
     release_timeline: list[ReleaseWeekPlan]
     generated_at: datetime
+
+
+class MarketingCrewRequest(BaseModel):
+    artist_name: str
+    track_title: str
+    genre: str
+    mood: str
+    bpm: int = Field(ge=40, le=220)
+    campaign_objective: str
+    target_audience: str
+    comparison_artists: list[str] = Field(default_factory=list)
+    differentiators: list[str] = Field(default_factory=list)
+    priority_markets: list[str] = Field(default_factory=list)
+    persist_state: bool = False
+    thread_id: str | None = None
+
+
+class AudienceSegment(BaseModel):
+    name: str
+    age_range: str
+    platforms: list[str]
+    motivations: list[str]
+
+
+class MarketResearchOutput(BaseModel):
+    audience_segments: list[AudienceSegment]
+    trending_keywords: list[str]
+    regional_priorities: list[str]
+    positioning_notes: list[str]
+
+
+class PressKitOutput(BaseModel):
+    headline: str
+    artist_bio: str
+    press_angle: str
+    talking_points: list[str]
+
+
+class CanvasPromptOutput(BaseModel):
+    visual_direction: str
+    motion_notes: list[str]
+    prompt: str
+
+
+class SocialCopyOutput(BaseModel):
+    platform: str
+    hook: str
+    caption: str
+    call_to_action: str
+
+
+class CopywriterOutput(BaseModel):
+    press_kit: PressKitOutput
+    canvas_prompt: CanvasPromptOutput
+    social_copy: list[SocialCopyOutput]
+
+
+class MediaMatchOutput(BaseModel):
+    outlet_name: str
+    editor_role: str
+    beat_focus: str
+    match_score: float
+    rationale: list[str]
+    outreach_subject: str
+    outreach_pitch: str
+
+
+class OutreachPlanOutput(BaseModel):
+    priority_matches: list[MediaMatchOutput]
+    sequencing_notes: list[str]
+
+
+class MarketingCrewResponse(BaseModel):
+    thread_id: str
+    state_id: UUID | None = None
+    campaign_brief: str
+    market_research: MarketResearchOutput
+    copywriter_output: CopywriterOutput
+    outreach_plan: OutreachPlanOutput
+    generated_at: datetime

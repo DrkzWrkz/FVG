@@ -188,3 +188,36 @@ def test_virtual_manager_generates_six_week_plan_and_persists_state():
         )
         assert thread_response.status_code == 200
         assert thread_response.json()["agent_name"] == "virtual-manager"
+
+
+def test_marketing_pr_crew_generates_pipeline_and_persists_state():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/agents/marketing-pr/launch-campaign",
+            json={
+                "artist_name": "Nova Bloom",
+                "track_title": "Midnight Relay",
+                "genre": "indie pop",
+                "mood": "cinematic",
+                "bpm": 124,
+                "campaign_objective": "Expand discovery and secure editorial plus culture coverage.",
+                "target_audience": "fans of emotionally detailed alt-pop with playlist and social sharing behavior",
+                "comparison_artists": ["MUNA", "The Japanese House"],
+                "differentiators": ["night-drive visuals", "high-retention hooks", "fan-first storytelling"],
+                "priority_markets": ["US", "UK", "CA"],
+                "persist_state": True
+            }
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["state_id"] is not None
+        assert len(payload["market_research"]["audience_segments"]) >= 2
+        assert len(payload["copywriter_output"]["social_copy"]) >= 3
+        assert len(payload["outreach_plan"]["priority_matches"]) == 4
+
+        thread_response = client.get(
+            f"/api/v1/agents/marketing-pr/threads/{payload['thread_id']}"
+        )
+        assert thread_response.status_code == 200
+        assert thread_response.json()["agent_name"] == "marketing-pr-crew"
