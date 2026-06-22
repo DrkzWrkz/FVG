@@ -385,8 +385,9 @@ export function LegalRoyaltyPanel() {
     }
 
     if (isRecord(latestOutputEvent?.payload)) {
+      const outputPayload = latestOutputEvent.payload as unknown as LegalRoyaltyResponse;
       setResult({
-        ...(latestOutputEvent.payload as LegalRoyaltyResponse),
+        ...outputPayload,
         state_id: state.id
       });
     } else {
