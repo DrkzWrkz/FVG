@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from agents import ORG_CHART
 from agents.ar_discovery import run_discovery_scan
+from agents.legal_royalty import run_legal_royalty_workflow
 from agents.marketing_pr import run_marketing_pr_crew
 from agents.virtual_manager import build_release_strategy
 from config import settings
@@ -44,6 +45,8 @@ from schemas import (
     DiscoveryScanRequest,
     DiscoveryScanResponse,
     HealthResponse,
+    LegalRoyaltyRequest,
+    LegalRoyaltyResponse,
     MarketingCrewRequest,
     MarketingCrewResponse,
     ReleaseStrategyRequest,
@@ -589,6 +592,45 @@ def execute_marketing_pr_crew(
 )
 def get_marketing_pr_thread(thread_id: str, db: Session = Depends(get_db)) -> AgentState:
     state = get_agent_state_by_thread(db, agent_name="marketing-pr-crew", thread_id=thread_id)
+    if state is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
+    return state
+
+
+@app.post(
+    f"{settings.api_prefix}/agents/legal-royalty/evaluate-contract",
+    response_model=LegalRoyaltyResponse,
+    tags=["agents"]
+)
+def execute_legal_royalty_workflow(
+    payload: LegalRoyaltyRequest,
+    db: Session = Depends(get_db)
+) -> LegalRoyaltyResponse:
+    result = run_legal_royalty_workflow(payload)
+
+    if payload.persist_state:
+        state = persist_agent_workflow_state(
+            db,
+            agent_name="legal-royalty",
+            thread_id=result.thread_id,
+            entity_type="legal-royalty-analysis",
+            payload=payload,
+            result=result,
+            tool_name="recoupment-calculator",
+            state_status="human-review-required" if result.requires_human_review else "completed"
+        )
+        result.state_id = state.id
+
+    return result
+
+
+@app.get(
+    f"{settings.api_prefix}/agents/legal-royalty/threads/{{thread_id}}",
+    response_model=AgentStateRead,
+    tags=["agents"]
+)
+def get_legal_royalty_thread(thread_id: str, db: Session = Depends(get_db)) -> AgentState:
+    state = get_agent_state_by_thread(db, agent_name="legal-royalty", thread_id=thread_id)
     if state is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
     return state

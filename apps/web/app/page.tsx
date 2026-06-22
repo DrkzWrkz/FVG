@@ -61,6 +61,7 @@ const apiRoutes = [
   "POST /api/v1/agents/ar-discovery/scan",
   "POST /api/v1/agents/virtual-manager/release-plan",
   "POST /api/v1/agents/marketing-pr/launch-campaign",
+  "POST /api/v1/agents/legal-royalty/evaluate-contract",
   "POST /api/v1/artists/intake-preview",
   "POST /api/v1/tracks/intake-preview",
   "POST /api/v1/contracts/intake-preview",

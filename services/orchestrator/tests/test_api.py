@@ -278,3 +278,62 @@ def test_agent_history_route_filters_and_returns_saved_threads():
         )
         assert filtered_state_response.status_code == 200
         assert len(filtered_state_response.json()) == 1
+
+
+def test_legal_royalty_workflow_models_recoupment_and_flags_review():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/agents/legal-royalty/evaluate-contract",
+            json={
+                "artist_name": "Nova Bloom",
+                "track_title": "Midnight Relay",
+                "contract_reference": "LBL-2026-001",
+                "split_sheet": [
+                    {
+                        "party_name": "Nova Bloom",
+                        "role": "artist",
+                        "ownership_percent": "60.00",
+                        "recoupable": True,
+                        "contact_email": "nova@example.com"
+                    },
+                    {
+                        "party_name": "Signal Works",
+                        "role": "producer",
+                        "ownership_percent": "25.00",
+                        "recoupable": True,
+                        "contact_email": "signal@example.com"
+                    },
+                    {
+                        "party_name": "Nova Bloom",
+                        "role": "writer",
+                        "ownership_percent": "10.00",
+                        "recoupable": False,
+                        "contact_email": "nova-writer@example.com"
+                    }
+                ],
+                "gross_revenue": "10000.00",
+                "royalty_pool_rate": "0.80000",
+                "distribution_fee_rate": "0.10000",
+                "advance_amount": "2000.00",
+                "prior_unrecouped_balance": "1000.00",
+                "recoupment_rate": "0.50000",
+                "persist_state": True
+            }
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["requires_human_review"] is True
+        assert payload["split_sheet_analysis"]["duplicate_parties"] == ["Nova Bloom"]
+        assert payload["recoupment_model"]["distribution_fee_amount"] == "1000.00"
+        assert payload["recoupment_model"]["royalty_pool_amount"] == "7200.00"
+        assert payload["recoupment_model"]["recoupment_withheld"] == "3000.00"
+        assert payload["recoupment_model"]["remaining_unrecouped_balance"] == "0.00"
+        assert payload["state_id"] is not None
+
+        thread_response = client.get(
+            f"/api/v1/agents/legal-royalty/threads/{payload['thread_id']}"
+        )
+        assert thread_response.status_code == 200
+        assert thread_response.json()["agent_name"] == "legal-royalty"
+        assert thread_response.json()["state_status"] == "human-review-required"

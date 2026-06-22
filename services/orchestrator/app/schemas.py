@@ -363,3 +363,84 @@ class MarketingCrewResponse(BaseModel):
     copywriter_output: CopywriterOutput
     outreach_plan: OutreachPlanOutput
     generated_at: datetime
+
+
+class SplitSheetLineItem(BaseModel):
+    party_name: str
+    role: str
+    ownership_percent: Decimal = Field(ge=0, le=100)
+    recoupable: bool = True
+    contact_email: str | None = None
+
+
+class LegalRoyaltyRequest(BaseModel):
+    artist_name: str
+    track_title: str
+    contract_reference: str | None = None
+    split_sheet: list[SplitSheetLineItem]
+    gross_revenue: Decimal = Decimal("0.00")
+    royalty_pool_rate: Decimal = Field(default=Decimal("1.00000"), ge=0, le=1)
+    distribution_fee_rate: Decimal = Field(default=Decimal("0.00000"), ge=0, le=1)
+    advance_amount: Decimal = Decimal("0.00")
+    prior_unrecouped_balance: Decimal = Decimal("0.00")
+    recoupment_rate: Decimal = Field(default=Decimal("1.00000"), ge=0, le=1)
+    persist_state: bool = False
+    thread_id: str | None = None
+
+
+class SplitSheetValidationIssue(BaseModel):
+    severity: str
+    message: str
+
+
+class NormalizedSplitLineItem(BaseModel):
+    party_name: str
+    role: str
+    declared_ownership_percent: Decimal
+    normalized_ownership_percent: Decimal
+    recoupable: bool
+    contact_email: str | None = None
+
+
+class SplitSheetAnalysis(BaseModel):
+    total_declared_percent: Decimal
+    normalized_split_sheet: list[NormalizedSplitLineItem]
+    duplicate_parties: list[str]
+    validation_issues: list[SplitSheetValidationIssue]
+    requires_human_review: bool
+    recoupable_party_count: int
+
+
+class ParticipantRecoupmentPayout(BaseModel):
+    party_name: str
+    role: str
+    ownership_percent: Decimal
+    pre_recoupment_amount: Decimal
+    recoupment_withheld_amount: Decimal
+    payout_amount: Decimal
+    recoupable: bool
+
+
+class RecoupmentModel(BaseModel):
+    gross_revenue: Decimal
+    distribution_fee_amount: Decimal
+    net_receipts: Decimal
+    royalty_pool_amount: Decimal
+    total_recoupable_balance: Decimal
+    recoupment_withheld: Decimal
+    remaining_unrecouped_balance: Decimal
+    total_distributable_amount: Decimal
+    participant_payouts: list[ParticipantRecoupmentPayout]
+
+
+class LegalRoyaltyResponse(BaseModel):
+    thread_id: str
+    state_id: UUID | None = None
+    artist_name: str
+    track_title: str
+    contract_reference: str | None = None
+    requires_human_review: bool
+    legal_summary: str
+    split_sheet_analysis: SplitSheetAnalysis
+    recoupment_model: RecoupmentModel
+    generated_at: datetime
