@@ -789,10 +789,14 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
                 <p className="font-medium text-white">Supported extraction format</p>
                 <p className="mt-2">
                   Use lines like <span className="font-mono">Artist: ...</span>,{" "}
-                  <span className="font-mono">Track: ...</span>, and split rows such as{" "}
+                  <span className="font-mono">Track: ...</span>, section headers like{" "}
+                  <span className="font-mono">SPLIT SHEET</span> or{" "}
+                  <span className="font-mono">ECONOMIC TERMS</span>, and split rows such as{" "}
                   <span className="font-mono">
                     Name | role | 50% | recoupable | email@example.com
-                  </span>.
+                  </span>
+                  , <span className="font-mono">Name (role) - 50% - recoupable</span>, or{" "}
+                  <span className="font-mono">role: Name - 50%</span>.
                 </p>
               </div>
 

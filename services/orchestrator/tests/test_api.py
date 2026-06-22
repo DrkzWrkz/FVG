@@ -342,6 +342,61 @@ Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com
         assert len(history_response.json()) == 1
 
 
+def test_legal_document_ingestion_parses_sections_clauses_and_alternate_split_rows():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/agents/legal-royalty/ingest-document",
+            data={
+                "raw_text": """
+PARTIES
+Artist Name - Luna Vale
+Recording Title - Neon Hearts
+Agreement No. ALT-2026-44
+
+ECONOMIC TERMS
+Label shall pay an advance of $3,500 to Artist upon execution.
+The distribution fee shall equal ten percent (10%) of gross receipts.
+Eighty percent (80%) of net receipts shall comprise the royalty pool.
+Fifty percent (50%) of the royalty pool shall be applied toward recoupment.
+Current unrecouped balance is $750.00.
+
+SPLIT SHEET
+artist: Luna Vale - 55% - recoupable - luna@example.com
+Signal Works (producer) - 25% - recoupable - signal@example.com
+Avery Lane / writer / 20% / non-recoupable / avery@example.com
+
+COPYRIGHT CHECKLIST
+Human Written Lyrics - yes
+Human Composed Melody - yes
+Human Arranged Structure - yes
+AI Generated Lyrics - no
+AI Generated Artwork - yes
+Human Edited AI Material - yes
+Source Material Rights Cleared - yes
+Contributor Agreements Collected - yes
+Splits Confirmed By All Parties - yes
+"""
+            }
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["extracted_data"]["artist_name"] == "Luna Vale"
+        assert payload["extracted_data"]["track_title"] == "Neon Hearts"
+        assert payload["extracted_data"]["contract_reference"] == "ALT-2026-44"
+        assert payload["extracted_data"]["advance_amount"] == "3500.00"
+        assert payload["extracted_data"]["distribution_fee_rate"] == "0.10000"
+        assert payload["extracted_data"]["royalty_pool_rate"] == "0.80000"
+        assert payload["extracted_data"]["recoupment_rate"] == "0.50000"
+        assert payload["extracted_data"]["prior_unrecouped_balance"] == "750.00"
+        assert len(payload["extracted_data"]["split_sheet"]) == 3
+        assert payload["extracted_data"]["split_sheet"][0]["party_name"] == "Luna Vale"
+        assert payload["extracted_data"]["split_sheet"][1]["role"] == "producer"
+        assert payload["extracted_data"]["split_sheet"][2]["recoupable"] is False
+        assert payload["extracted_data"]["copyright_checklist"]["contributor_agreements_collected"] is True
+        assert payload["requires_human_review"] is False
+
+
 def test_legal_royalty_workflow_models_recoupment_and_flags_review():
     with TestClient(app) as client:
         response = client.post(

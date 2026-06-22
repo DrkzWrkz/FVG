@@ -40,6 +40,36 @@ AGENT_BLUEPRINT = {
 
 PERCENT_QUANTUM = Decimal("0.00001")
 CURRENCY_QUANTUM = Decimal("0.01")
+SECTION_ALIASES = {
+    "split_sheet": [
+        "split sheet",
+        "splits",
+        "ownership splits",
+        "writer splits",
+        "producer splits"
+    ],
+    "economics": [
+        "economics",
+        "economic terms",
+        "financial terms",
+        "royalty terms",
+        "recoupment",
+        "payment terms"
+    ],
+    "copyright": [
+        "copyright",
+        "copyright checklist",
+        "authorship",
+        "ai disclosure",
+        "ownership checklist"
+    ],
+    "parties": [
+        "parties",
+        "agreement details",
+        "metadata",
+        "recording details"
+    ]
+}
 
 
 def _quantize_percent(value: Decimal) -> Decimal:
@@ -52,6 +82,55 @@ def _quantize_currency(value: Decimal) -> Decimal:
 
 def _normalize_party_name(name: str) -> str:
     return " ".join(name.strip().lower().split())
+
+
+def _normalize_heading(line: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", line.lower()).strip()
+
+
+def _extract_sections(text: str) -> dict[str, str]:
+    sections: dict[str, list[str]] = {}
+    current_section = "global"
+    sections[current_section] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        normalized = _normalize_heading(line)
+
+        matched_section = None
+        if normalized:
+            for section_key, aliases in SECTION_ALIASES.items():
+                if normalized in aliases or any(
+                    normalized.startswith(alias) or alias in normalized
+                    for alias in aliases
+                ):
+                    if len(normalized.split()) <= 6:
+                        matched_section = section_key
+                        break
+
+        if matched_section:
+            current_section = matched_section
+            sections.setdefault(current_section, [])
+            continue
+
+        sections.setdefault(current_section, []).append(line)
+
+    return {
+        key: "\n".join(lines).strip()
+        for key, lines in sections.items()
+        if any(line.strip() for line in lines)
+    }
+
+
+def _preferred_section_text(
+    raw_text: str,
+    sections: dict[str, str],
+    preferred_keys: list[str]
+) -> str:
+    collected = [sections[key] for key in preferred_keys if sections.get(key)]
+    if collected:
+        return "\n".join(collected)
+    return raw_text
 
 
 def _extract_line_value(text: str, patterns: list[str]) -> str | None:
@@ -90,44 +169,102 @@ def _parse_rate_value(raw_value: str | None, default: Decimal) -> Decimal:
 
 def _extract_boolean_value(text: str, labels: list[str], default: bool) -> bool:
     for label in labels:
-        match = re.search(
-            rf"(?im)^\s*{label}\s*:\s*(yes|no|true|false|1|0)\s*$",
-            text
-        )
-        if match:
-            value = match.group(1).strip().lower()
-            return value in {"yes", "true", "1"}
+        patterns = [
+            rf"(?im)^\s*{label}\s*[:=\-]\s*(yes|no|true|false|1|0)\s*$",
+            rf"(?im)^\s*{label}\s*\[(x| )\]\s*$",
+            rf"(?im)^\s*{label}\s*\((yes|no|true|false)\)\s*$"
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                value = match.group(1).strip().lower()
+                return value in {"yes", "true", "1", "x"}
     return default
 
 
 def _extract_split_sheet_lines(text: str) -> list[SplitSheetLineItem]:
     split_sheet: list[SplitSheetLineItem] = []
-    pattern = re.compile(
-        r"^\s*(?:[-*]\s*)?(?P<name>[^|,]+?)\s*(?:\||,)\s*"
-        r"(?P<role>[^|,]+?)\s*(?:\||,)\s*"
+    seen_keys: set[tuple[str, str, str]] = set()
+    delimiter_pattern = re.compile(
+        r"^\s*(?:[-*]\s*)?(?P<name>[^|,;/\t-][^|,;/\t]*?)\s*(?:\||,|/|;|\t| - )\s*"
+        r"(?P<role>[^|,;/\t-][^|,;/\t]*?)\s*(?:\||,|/|;|\t| - )\s*"
         r"(?P<percent>\d+(?:\.\d+)?)%\s*"
-        r"(?:(?:\||,)\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
-        r"(?:(?:\||,)\s*(?P<email>\S+@\S+))?\s*$",
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<email>\S+@\S+))?\s*$",
+        flags=re.IGNORECASE
+    )
+    paren_pattern = re.compile(
+        r"^\s*(?:[-*]\s*)?(?P<name>.+?)\s*\((?P<role>[^)]+)\)\s*(?:\||,|/|;|\t| - )?\s*"
+        r"(?P<percent>\d+(?:\.\d+)?)%\s*"
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<email>\S+@\S+))?\s*$",
+        flags=re.IGNORECASE
+    )
+    role_first_pattern = re.compile(
+        r"^\s*(?:[-*]\s*)?(?P<role>artist|writer|producer|composer|featured artist|engineer)\s*:\s*"
+        r"(?P<name>.+?)\s*(?:\||,|/|;|\t| - )\s*(?P<percent>\d+(?:\.\d+)?)%\s*"
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
+        r"(?:(?:\||,|/|;|\t| - )\s*(?P<email>\S+@\S+))?\s*$",
+        flags=re.IGNORECASE
+    )
+    colon_pattern = re.compile(
+        r"^\s*(?:[-*]\s*)?(?P<name>[^:]+?)\s*:\s*(?P<role>[A-Za-z][A-Za-z ]+?)\s*[:\-]\s*"
+        r"(?P<percent>\d+(?:\.\d+)?)%\s*"
+        r"(?:(?:[:\-]|,)\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
+        r"(?:(?:[:\-]|,)\s*(?P<email>\S+@\S+))?\s*$",
         flags=re.IGNORECASE
     )
 
-    for line in text.splitlines():
-        match = pattern.match(line)
-        if not match:
-            continue
-
+    def append_match(match: re.Match[str]) -> None:
         recoupable_token = (match.group("recoupable") or "recoupable").strip().lower()
+        party_name = match.group("name").strip()
+        role = match.group("role").strip()
+        percent = _quantize_percent(Decimal(match.group("percent")))
+        dedupe_key = (_normalize_party_name(party_name), role.lower(), str(percent))
+        if dedupe_key in seen_keys:
+            return
+        seen_keys.add(dedupe_key)
         split_sheet.append(
             SplitSheetLineItem(
-                party_name=match.group("name").strip(),
-                role=match.group("role").strip(),
-                ownership_percent=_quantize_percent(Decimal(match.group("percent"))),
+                party_name=party_name,
+                role=role,
+                ownership_percent=percent,
                 recoupable=recoupable_token not in {"non-recoupable", "non recoupable", "no", "false"},
                 contact_email=match.group("email").strip() if match.group("email") else None
             )
         )
 
+    for line in text.splitlines():
+        for pattern in (
+            delimiter_pattern,
+            paren_pattern,
+            role_first_pattern,
+            colon_pattern
+        ):
+            match = pattern.match(line)
+            if match:
+                append_match(match)
+                break
+
     return split_sheet
+
+
+def _extract_decimal_from_text(
+    text: str,
+    patterns: list[str],
+    default: Decimal = Decimal("0.00")
+) -> Decimal:
+    raw_value = _extract_line_value(text, patterns)
+    return _parse_decimal_value(raw_value, default)
+
+
+def _extract_rate_from_text(
+    text: str,
+    patterns: list[str],
+    default: Decimal
+) -> Decimal:
+    raw_value = _extract_line_value(text, patterns)
+    return _parse_rate_value(raw_value, default)
 
 
 def _allocate_by_weight(
@@ -442,95 +579,143 @@ def run_legal_document_ingestion(
     source_name: str,
     thread_id: str | None = None
 ) -> LegalDocumentIngestionResponse:
+    sections = _extract_sections(raw_text)
+    parties_text = _preferred_section_text(raw_text, sections, ["parties"])
+    economics_text = _preferred_section_text(raw_text, sections, ["economics"])
+    split_text = _preferred_section_text(raw_text, sections, ["split_sheet"])
+    copyright_text = _preferred_section_text(raw_text, sections, ["copyright"])
+
     artist_name = _extract_line_value(
-        raw_text,
-        [r"^\s*artist(?: name)?\s*:\s*(.+)$"]
+        parties_text,
+        [
+            r"^\s*artist(?: name)?\s*[:=\-]\s*(.+)$",
+            r"^\s*party\s*1\s*[:=\-]\s*(.+)$",
+            r'between\s+[A-Za-z0-9 .&,"\']+\s+and\s+([A-Za-z0-9 .&\'-]+)\s+\("artist"\)'
+        ]
     ) or "Unknown artist"
     track_title = _extract_line_value(
-        raw_text,
-        [r"^\s*(?:track|song|title)\s*:\s*(.+)$"]
+        parties_text,
+        [
+            r"^\s*(?:track|song|title|recording title)\s*[:=\-]\s*(.+)$",
+            r'track\s+entitled\s+"([^"]+)"',
+            r'recording\s+"([^"]+)"'
+        ]
     ) or "Untitled track"
     contract_reference = _extract_line_value(
-        raw_text,
-        [r"^\s*contract(?: reference| id)?\s*:\s*(.+)$"]
+        parties_text,
+        [
+            r"^\s*contract(?: reference| id)?\s*[:=\-]\s*(.+)$",
+            r"^\s*(?:agreement|deal memo)\s*(?:no\.?|number|reference)?\s*[:=\-]\s*(.+)$",
+            r"\bref(?:erence)?\s*(?:no\.?|number)?\s*[:=\-]\s*([A-Za-z0-9\-_/]+)"
+        ]
     )
 
-    gross_revenue = _parse_decimal_value(
-        _extract_line_value(raw_text, [r"^\s*gross (?:revenue|receipts?)\s*:\s*(.+)$"])
+    gross_revenue = _extract_decimal_from_text(
+        economics_text,
+        [
+            r"^\s*gross (?:revenue|receipts?|income)\s*[:=\-]\s*(.+)$",
+            r"gross (?:revenue|receipts?|income)[^\n$]{0,80}\$?\s*([\d,]+(?:\.\d+)?)"
+        ]
     )
-    royalty_pool_rate = _parse_rate_value(
-        _extract_line_value(raw_text, [r"^\s*royalty pool rate\s*:\s*(.+)$"]),
+    royalty_pool_rate = _extract_rate_from_text(
+        economics_text,
+        [
+            r"^\s*royalty pool rate\s*[:=\-]\s*(.+)$",
+            r"royalty pool[^\n]{0,120}?\(?(\d+(?:\.\d+)?)%\)?",
+            r"(\d+(?:\.\d+)?)%\s+of net receipts shall comprise the royalty pool",
+            r"\(?(\d+(?:\.\d+)?)%\)?[^\n]{0,80}royalty pool"
+        ],
         Decimal("1.00000")
     )
-    distribution_fee_rate = _parse_rate_value(
-        _extract_line_value(raw_text, [r"^\s*distribution fee rate\s*:\s*(.+)$"]),
+    distribution_fee_rate = _extract_rate_from_text(
+        economics_text,
+        [
+            r"^\s*distribution fee rate\s*[:=\-]\s*(.+)$",
+            r"distribution fee[^\n]{0,120}?\(?(\d+(?:\.\d+)?)%\)?",
+            r"distributor retains[^\n]{0,80}?\(?(\d+(?:\.\d+)?)%\)?",
+            r"\(?(\d+(?:\.\d+)?)%\)?[^\n]{0,80}distribution fee"
+        ],
         Decimal("0.00000")
     )
-    advance_amount = _parse_decimal_value(
-        _extract_line_value(raw_text, [r"^\s*advance(?: amount)?\s*:\s*(.+)$"])
+    advance_amount = _extract_decimal_from_text(
+        economics_text,
+        [
+            r"^\s*advance(?: amount)?\s*[:=\-]\s*(.+)$",
+            r"advance(?: amount)?[^\n$]{0,120}\$?\s*([\d,]+(?:\.\d+)?)"
+        ]
     )
-    prior_unrecouped_balance = _parse_decimal_value(
-        _extract_line_value(raw_text, [r"^\s*prior unrecouped balance\s*:\s*(.+)$"])
+    prior_unrecouped_balance = _extract_decimal_from_text(
+        economics_text,
+        [
+            r"^\s*(?:prior|current) unrecouped balance\s*[:=\-]\s*(.+)$",
+            r"(?:prior|current) unrecouped balance[^\n$]{0,120}\$?\s*([\d,]+(?:\.\d+)?)"
+        ]
     )
-    recoupment_rate = _parse_rate_value(
-        _extract_line_value(raw_text, [r"^\s*recoupment rate\s*:\s*(.+)$"]),
+    recoupment_rate = _extract_rate_from_text(
+        economics_text,
+        [
+            r"^\s*recoupment rate\s*[:=\-]\s*(.+)$",
+            r"recoupment(?: rate)?[^\n]{0,120}?\(?(\d+(?:\.\d+)?)%\)?",
+            r"(\d+(?:\.\d+)?)%\s+of (?:the )?royalty pool shall be applied toward recoupment",
+            r"\(?(\d+(?:\.\d+)?)%\)?[^\n]{0,80}recoupment"
+        ],
         Decimal("1.00000")
     )
 
-    split_sheet = _extract_split_sheet_lines(raw_text)
+    split_sheet = _extract_split_sheet_lines(split_text)
     checklist = CopyrightChecklistInput(
         has_human_written_lyrics=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["human written lyrics", "has human written lyrics"],
             True
         ),
         has_human_composed_melody=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["human composed melody", "has human composed melody"],
             True
         ),
         has_human_arranged_structure=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["human arranged structure", "has human arranged structure"],
             True
         ),
         ai_generated_lyrics=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["ai generated lyrics"],
             False
         ),
         ai_generated_melody=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["ai generated melody"],
             False
         ),
         ai_generated_master_audio=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["ai generated master audio"],
             False
         ),
         ai_generated_artwork=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["ai generated artwork"],
             False
         ),
         human_edited_ai_material=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["human edited ai material"],
             False
         ),
         source_material_rights_cleared=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["source material rights cleared"],
             True
         ),
         contributor_agreements_collected=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["contributor agreements collected"],
             False
         ),
         splits_confirmed_by_all_parties=_extract_boolean_value(
-            raw_text,
+            copyright_text,
             ["splits confirmed by all parties"],
             False
         )
@@ -547,7 +732,7 @@ def run_legal_document_ingestion(
         missing_fields.append("contract_reference")
     if not split_sheet:
         extraction_issues.append(
-            "No structured split-sheet lines were detected. Use lines such as 'Name | role | 50% | recoupable | email@example.com'."
+            "No structured split-sheet lines were detected. Use lines such as 'Name | role | 50% | recoupable | email@example.com', 'Name (role) - 50% - recoupable', or 'role: Name - 50%'."
         )
         split_sheet = [SplitSheetLineItem(
             party_name="",
