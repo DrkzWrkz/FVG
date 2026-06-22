@@ -101,10 +101,13 @@ def _extract_sections(text: str) -> dict[str, str]:
         if normalized:
             for section_key, aliases in SECTION_ALIASES.items():
                 if normalized in aliases or any(
-                    normalized.startswith(alias) or alias in normalized
+                    re.match(
+                        rf"^(?:section|article|schedule|appendix)\s+[a-z0-9ivx]+\s+{re.escape(alias)}$",
+                        normalized
+                    )
                     for alias in aliases
                 ):
-                    if len(normalized.split()) <= 6:
+                    if len(normalized.split()) <= 8:
                         matched_section = section_key
                         break
 
@@ -605,7 +608,7 @@ def run_legal_document_ingestion(
         parties_text,
         [
             r"^\s*contract(?: reference| id)?\s*[:=\-]\s*(.+)$",
-            r"^\s*(?:agreement|deal memo)\s*(?:no\.?|number|reference)?\s*[:=\-]\s*(.+)$",
+            r"^\s*(?:agreement|deal memo)\s*(?:no\.?|number|reference)?\s*(?:[:=\-]\s*|\s+)(.+)$",
             r"\bref(?:erence)?\s*(?:no\.?|number)?\s*[:=\-]\s*([A-Za-z0-9\-_/]+)"
         ]
     )
