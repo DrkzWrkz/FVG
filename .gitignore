@@ -14,6 +14,7 @@ node_modules/
 dist/
 coverage/
 *.log
+*.db
 pnpm-lock.yaml
 yarn.lock
 record_label.db

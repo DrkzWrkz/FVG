@@ -7,3 +7,4 @@ pydantic-settings
 langgraph
 crewai
 httpx
+pytest

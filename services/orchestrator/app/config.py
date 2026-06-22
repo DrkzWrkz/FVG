@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/autonomous_label"
+    database_auto_create: bool = False
     qdrant_url: str = "http://localhost:6333"
 
     model_config = SettingsConfigDict(
