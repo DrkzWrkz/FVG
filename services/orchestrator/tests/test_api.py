@@ -280,6 +280,53 @@ def test_agent_history_route_filters_and_returns_saved_threads():
         assert len(filtered_state_response.json()) == 1
 
 
+def test_legal_document_ingestion_extracts_contract_fields():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/agents/legal-royalty/ingest-document",
+            data={
+                "thread_id": "legal-royalty-demo-thread",
+                "raw_text": """
+Artist: Nova Bloom
+Track: Midnight Relay
+Contract Reference: LBL-2026-INGEST
+Gross Revenue: $10,000.00
+Royalty Pool Rate: 80%
+Distribution Fee Rate: 10%
+Advance Amount: $2,000.00
+Prior Unrecouped Balance: $1,000.00
+Recoupment Rate: 50%
+Human Written Lyrics: yes
+Human Composed Melody: yes
+Human Arranged Structure: yes
+AI Generated Lyrics: yes
+AI Generated Artwork: yes
+Human Edited AI Material: yes
+Source Material Rights Cleared: yes
+Contributor Agreements Collected: no
+Splits Confirmed By All Parties: no
+
+Nova Bloom | artist | 60% | recoupable | nova@example.com
+Signal Works | producer | 25% | recoupable | signal@example.com
+Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com
+"""
+            }
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["thread_id"] == "legal-royalty-demo-thread"
+        assert payload["source_name"] == "pasted-raw-text"
+        assert payload["extracted_data"]["artist_name"] == "Nova Bloom"
+        assert payload["extracted_data"]["track_title"] == "Midnight Relay"
+        assert payload["extracted_data"]["contract_reference"] == "LBL-2026-INGEST"
+        assert payload["extracted_data"]["gross_revenue"] == "10000.00"
+        assert payload["extracted_data"]["royalty_pool_rate"] == "0.80000"
+        assert len(payload["extracted_data"]["split_sheet"]) == 3
+        assert payload["extracted_data"]["copyright_checklist"]["ai_generated_lyrics"] is True
+        assert payload["requires_human_review"] is False
+
+
 def test_legal_royalty_workflow_models_recoupment_and_flags_review():
     with TestClient(app) as client:
         response = client.post(

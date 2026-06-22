@@ -345,6 +345,30 @@ export interface LegalApprovalCheckpointResponse {
   recorded_at: string;
 }
 
+export interface LegalDocumentExtractionData {
+  artist_name: string;
+  track_title: string;
+  contract_reference: string | null;
+  split_sheet: SplitSheetLineItem[];
+  gross_revenue: string;
+  royalty_pool_rate: string;
+  distribution_fee_rate: string;
+  advance_amount: string;
+  prior_unrecouped_balance: string;
+  recoupment_rate: string;
+  copyright_checklist: CopyrightChecklistInput;
+}
+
+export interface LegalDocumentIngestionResponse {
+  thread_id: string;
+  source_name: string;
+  extracted_data: LegalDocumentExtractionData;
+  extraction_issues: string[];
+  missing_fields: string[];
+  requires_human_review: boolean;
+  generated_at: string;
+}
+
 export interface LegalRoyaltyResponse {
   thread_id: string;
   state_id: string | null;

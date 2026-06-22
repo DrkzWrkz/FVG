@@ -2,13 +2,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from agents import ORG_CHART
 from agents.ar_discovery import run_discovery_scan
-from agents.legal_royalty import run_legal_royalty_workflow
+from agents.legal_royalty import run_legal_document_ingestion, run_legal_royalty_workflow
 from agents.marketing_pr import run_marketing_pr_crew
 from agents.virtual_manager import build_release_strategy
 from config import settings
@@ -48,6 +48,7 @@ from schemas import (
     HealthResponse,
     LegalApprovalCheckpointRequest,
     LegalApprovalCheckpointResponse,
+    LegalDocumentIngestionResponse,
     LegalRoyaltyRequest,
     LegalRoyaltyResponse,
     MarketingCrewRequest,
@@ -637,6 +638,45 @@ def get_legal_royalty_thread(thread_id: str, db: Session = Depends(get_db)) -> A
     if state is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent state not found.")
     return state
+
+
+@app.post(
+    f"{settings.api_prefix}/agents/legal-royalty/ingest-document",
+    response_model=LegalDocumentIngestionResponse,
+    tags=["agents"]
+)
+async def ingest_legal_document(
+    raw_text: str | None = Form(default=None),
+    thread_id: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None)
+) -> LegalDocumentIngestionResponse:
+    document_text = (raw_text or "").strip()
+    source_name = "pasted-raw-text"
+
+    if file is not None:
+        source_name = file.filename or "uploaded-contract.txt"
+        uploaded_bytes = await file.read()
+        try:
+            file_text = uploaded_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Only UTF-8 compatible plain-text files are supported for deterministic ingestion."
+            ) from exc
+
+        document_text = file_text.strip()
+
+    if not document_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide either raw_text or an uploaded text file for ingestion."
+        )
+
+    return run_legal_document_ingestion(
+        raw_text=document_text,
+        source_name=source_name,
+        thread_id=thread_id
+    )
 
 
 @app.post(

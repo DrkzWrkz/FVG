@@ -28,11 +28,16 @@ import type {
   AgentStateHistorySummary,
   AgentStateRead,
   CopyrightChecklistInput,
+  LegalDocumentIngestionResponse,
   LegalApprovalCheckpointResponse,
   LegalRoyaltyResponse,
   SplitSheetLineItem
 } from "@/lib/agent-types";
-import { getFromOrchestrator, postToOrchestrator } from "@/lib/orchestrator-client";
+import {
+  getFromOrchestrator,
+  postFormToOrchestrator,
+  postToOrchestrator
+} from "@/lib/orchestrator-client";
 
 const fieldClassName =
   "w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400/50";
@@ -178,6 +183,29 @@ export function LegalRoyaltyPanel() {
   const [persistState, setPersistState] = useState(true);
   const [threadId, setThreadId] = useState("");
   const [threadLookupId, setThreadLookupId] = useState("");
+  const [documentRawText, setDocumentRawText] = useState(`Artist: Nova Bloom
+Track: Midnight Relay
+Contract Reference: LBL-2026-INGEST
+Gross Revenue: $10,000.00
+Royalty Pool Rate: 80%
+Distribution Fee Rate: 10%
+Advance Amount: $2,000.00
+Prior Unrecouped Balance: $1,000.00
+Recoupment Rate: 50%
+Human Written Lyrics: yes
+Human Composed Melody: yes
+Human Arranged Structure: yes
+AI Generated Lyrics: yes
+AI Generated Artwork: yes
+Human Edited AI Material: yes
+Source Material Rights Cleared: yes
+Contributor Agreements Collected: no
+Splits Confirmed By All Parties: no
+
+Nova Bloom | artist | 60% | recoupable | nova@example.com
+Signal Works | producer | 25% | recoupable | signal@example.com
+Nova Bloom | writer | 10% | non-recoupable | nova-writer@example.com`);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [copyrightChecklist, setCopyrightChecklist] =
     useState<CopyrightChecklistInput>(DEFAULT_COPYRIGHT_CHECKLIST);
   const [splitSheet, setSplitSheet] = useState<SplitSheetLineItem[]>([
@@ -206,6 +234,7 @@ export function LegalRoyaltyPanel() {
   const [result, setResult] = useState<LegalRoyaltyResponse | null>(null);
   const [approvalResult, setApprovalResult] = useState<LegalApprovalCheckpointResponse | null>(null);
   const [currentReviewStatus, setCurrentReviewStatus] = useState<string | null>(null);
+  const [ingestionResult, setIngestionResult] = useState<LegalDocumentIngestionResponse | null>(null);
   const [reviewerName, setReviewerName] = useState("Casey Morgan");
   const [reviewerRole, setReviewerRole] = useState("Label Counsel");
   const [reviewerNotes, setReviewerNotes] = useState(
@@ -215,10 +244,12 @@ export function LegalRoyaltyPanel() {
   const [error, setError] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApplyingCheckpoint, setIsApplyingCheckpoint] = useState(false);
   const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isIngestingDocument, setIsIngestingDocument] = useState(false);
 
   const declaredTotal = useMemo(
     () =>
@@ -355,6 +386,35 @@ export function LegalRoyaltyPanel() {
     }));
   };
 
+  const applyExtractedDraft = (
+    extractedData: LegalDocumentIngestionResponse["extracted_data"],
+    nextThreadId: string
+  ) => {
+    setArtistName(extractedData.artist_name);
+    setTrackTitle(extractedData.track_title);
+    setContractReference(extractedData.contract_reference ?? "");
+    setGrossRevenue(extractedData.gross_revenue);
+    setRoyaltyPoolRate(extractedData.royalty_pool_rate);
+    setDistributionFeeRate(extractedData.distribution_fee_rate);
+    setAdvanceAmount(extractedData.advance_amount);
+    setPriorUnrecoupedBalance(extractedData.prior_unrecouped_balance);
+    setRecoupmentRate(extractedData.recoupment_rate);
+    setSplitSheet(
+      extractedData.split_sheet.length > 0
+        ? extractedData.split_sheet.map((line) => ({
+            ...line,
+            contact_email: line.contact_email ?? ""
+          }))
+        : [createSplitLine()]
+    );
+    setCopyrightChecklist(extractedData.copyright_checklist);
+    setThreadId(nextThreadId);
+    setThreadLookupId(nextThreadId);
+    setResult(null);
+    setApprovalResult(null);
+    setCurrentReviewStatus(null);
+  };
+
   const hydrateFromThreadState = (state: AgentStateRead) => {
     const latestInputEvent = [...state.conversation_thread]
       .reverse()
@@ -368,20 +428,26 @@ export function LegalRoyaltyPanel() {
 
     if (isRecord(latestInputEvent?.payload)) {
       const payload = latestInputEvent.payload;
-      setArtistName(asString(payload.artist_name, artistName));
-      setTrackTitle(asString(payload.track_title, trackTitle));
-      setContractReference(asString(payload.contract_reference));
-      setGrossRevenue(asString(payload.gross_revenue, grossRevenue));
-      setRoyaltyPoolRate(asString(payload.royalty_pool_rate, royaltyPoolRate));
-      setDistributionFeeRate(asString(payload.distribution_fee_rate, distributionFeeRate));
-      setAdvanceAmount(asString(payload.advance_amount, advanceAmount));
-      setPriorUnrecoupedBalance(
-        asString(payload.prior_unrecouped_balance, priorUnrecoupedBalance)
+      applyExtractedDraft(
+        {
+          artist_name: asString(payload.artist_name, artistName),
+          track_title: asString(payload.track_title, trackTitle),
+          contract_reference: asString(payload.contract_reference),
+          split_sheet: normalizeSplitSheet(payload.split_sheet),
+          gross_revenue: asString(payload.gross_revenue, grossRevenue),
+          royalty_pool_rate: asString(payload.royalty_pool_rate, royaltyPoolRate),
+          distribution_fee_rate: asString(payload.distribution_fee_rate, distributionFeeRate),
+          advance_amount: asString(payload.advance_amount, advanceAmount),
+          prior_unrecouped_balance: asString(
+            payload.prior_unrecouped_balance,
+            priorUnrecoupedBalance
+          ),
+          recoupment_rate: asString(payload.recoupment_rate, recoupmentRate),
+          copyright_checklist: normalizeChecklist(payload.copyright_checklist)
+        },
+        state.thread_id
       );
-      setRecoupmentRate(asString(payload.recoupment_rate, recoupmentRate));
       setPersistState(asBoolean(payload.persist_state, true));
-      setSplitSheet(normalizeSplitSheet(payload.split_sheet));
-      setCopyrightChecklist(normalizeChecklist(payload.copyright_checklist));
     }
 
     if (isRecord(latestOutputEvent?.payload)) {
@@ -443,6 +509,43 @@ export function LegalRoyaltyPanel() {
       );
     } finally {
       setIsLoadingThread(false);
+    }
+  };
+
+  const ingestSourceDocument = async () => {
+    if (!documentRawText.trim() && !documentFile) {
+      setIngestionError("Provide raw text or upload a plain-text file to extract a legal draft.");
+      return;
+    }
+
+    setIngestionError(null);
+    setIsIngestingDocument(true);
+
+    try {
+      const formData = new FormData();
+      if (documentRawText.trim()) {
+        formData.append("raw_text", documentRawText);
+      }
+      if (threadId.trim()) {
+        formData.append("thread_id", threadId.trim());
+      }
+      if (documentFile) {
+        formData.append("file", documentFile);
+      }
+
+      const response = await postFormToOrchestrator<LegalDocumentIngestionResponse>(
+        "/api/v1/agents/legal-royalty/ingest-document",
+        formData
+      );
+
+      setIngestionResult(response);
+      applyExtractedDraft(response.extracted_data, response.thread_id);
+    } catch (ingestError) {
+      setIngestionError(
+        ingestError instanceof Error ? ingestError.message : "Unknown ingestion error."
+      );
+    } finally {
+      setIsIngestingDocument(false);
     }
   };
 
@@ -617,6 +720,89 @@ export function LegalRoyaltyPanel() {
                 No persisted legal threads yet. Save a legal run to make it reloadable here.
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+          <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <ReceiptText className="h-4 w-4 text-emerald-300" />
+            Contract document ingestion
+          </div>
+          <p className="mt-2 text-sm text-slate-400">
+            Paste raw contract text or upload a UTF-8 text file. The parser will extract the legal
+            draft fields and hydrate the form for review.
+          </p>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+            <label className="space-y-2">
+              <span className={labelClassName}>Raw source text</span>
+              <textarea
+                className={`${fieldClassName} min-h-56`}
+                value={documentRawText}
+                onChange={(event) => setDocumentRawText(event.target.value)}
+                placeholder="Paste contract or split-sheet text here..."
+              />
+            </label>
+
+            <div className="space-y-4">
+              <label className="space-y-2">
+                <span className={labelClassName}>Upload plain-text file</span>
+                <input
+                  className={fieldClassName}
+                  type="file"
+                  accept=".txt,.md,.csv,.text"
+                  onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
+                <p className="font-medium text-white">Supported extraction format</p>
+                <p className="mt-2">
+                  Use lines like <span className="font-mono">Artist: ...</span>,{" "}
+                  <span className="font-mono">Track: ...</span>, and split rows such as{" "}
+                  <span className="font-mono">
+                    Name | role | 50% | recoupable | email@example.com
+                  </span>.
+                </p>
+              </div>
+
+              <Button type="button" onClick={() => void ingestSourceDocument()} disabled={isIngestingDocument}>
+                {isIngestingDocument ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Extract legal draft
+              </Button>
+
+              {ingestionError ? (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                  {ingestionError}
+                </div>
+              ) : null}
+
+              {ingestionResult ? (
+                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                  <p className="text-sm font-medium text-white">
+                    Extracted draft from {ingestionResult.source_name}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-200">
+                    Thread ID: {ingestionResult.thread_id}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {ingestionResult.requires_human_review
+                      ? "Extraction surfaced issues or missing fields that need manual review."
+                      : "Extraction completed without blocking issues."}
+                  </p>
+                  {ingestionResult.extraction_issues.length > 0 ? (
+                    <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                      {ingestionResult.extraction_issues.map((issue) => (
+                        <li key={issue} className="flex gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-300" />
+                          <span>{issue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 

@@ -31,6 +31,19 @@ export async function postToOrchestrator<TResponse, TRequest>(
   return parseResponse<TResponse>(response);
 }
 
+export async function postFormToOrchestrator<TResponse>(
+  path: string,
+  payload: FormData
+): Promise<TResponse> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    body: payload,
+    cache: "no-store"
+  });
+
+  return parseResponse<TResponse>(response);
+}
+
 export async function getFromOrchestrator<TResponse>(path: string): Promise<TResponse> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "GET",

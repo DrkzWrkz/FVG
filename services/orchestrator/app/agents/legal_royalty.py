@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import re
 
 from schemas import (
+    CopyrightChecklistInput,
     CopyrightChecklistFinding,
     CopyrightEligibilityAnalysis,
+    LegalDocumentExtractionData,
+    LegalDocumentIngestionResponse,
     LegalRoyaltyRequest,
     LegalRoyaltyResponse,
     NormalizedSplitLineItem,
     ParticipantRecoupmentPayout,
     RecoupmentModel,
+    SplitSheetLineItem,
     SplitSheetAnalysis,
     SplitSheetValidationIssue
 )
@@ -47,6 +52,82 @@ def _quantize_currency(value: Decimal) -> Decimal:
 
 def _normalize_party_name(name: str) -> str:
     return " ".join(name.strip().lower().split())
+
+
+def _extract_line_value(text: str, patterns: list[str]) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _parse_decimal_value(raw_value: str | None, default: Decimal = Decimal("0.00")) -> Decimal:
+    if not raw_value:
+        return default
+
+    cleaned = raw_value.replace("$", "").replace(",", "").strip()
+    try:
+        return Decimal(cleaned)
+    except Exception:
+        return default
+
+
+def _parse_rate_value(raw_value: str | None, default: Decimal) -> Decimal:
+    if not raw_value:
+        return default
+
+    cleaned = raw_value.replace("%", "").replace(",", "").strip()
+    try:
+        parsed = Decimal(cleaned)
+    except Exception:
+        return default
+
+    if "%" in raw_value or parsed > 1:
+        parsed = parsed / Decimal("100")
+    return parsed.quantize(PERCENT_QUANTUM, rounding=ROUND_HALF_UP)
+
+
+def _extract_boolean_value(text: str, labels: list[str], default: bool) -> bool:
+    for label in labels:
+        match = re.search(
+            rf"(?im)^\s*{label}\s*:\s*(yes|no|true|false|1|0)\s*$",
+            text
+        )
+        if match:
+            value = match.group(1).strip().lower()
+            return value in {"yes", "true", "1"}
+    return default
+
+
+def _extract_split_sheet_lines(text: str) -> list[SplitSheetLineItem]:
+    split_sheet: list[SplitSheetLineItem] = []
+    pattern = re.compile(
+        r"^\s*(?:[-*]\s*)?(?P<name>[^|,]+?)\s*(?:\||,)\s*"
+        r"(?P<role>[^|,]+?)\s*(?:\||,)\s*"
+        r"(?P<percent>\d+(?:\.\d+)?)%\s*"
+        r"(?:(?:\||,)\s*(?P<recoupable>recoupable|non-recoupable|non recoupable|yes|no|true|false))?\s*"
+        r"(?:(?:\||,)\s*(?P<email>\S+@\S+))?\s*$",
+        flags=re.IGNORECASE
+    )
+
+    for line in text.splitlines():
+        match = pattern.match(line)
+        if not match:
+            continue
+
+        recoupable_token = (match.group("recoupable") or "recoupable").strip().lower()
+        split_sheet.append(
+            SplitSheetLineItem(
+                party_name=match.group("name").strip(),
+                role=match.group("role").strip(),
+                ownership_percent=_quantize_percent(Decimal(match.group("percent"))),
+                recoupable=recoupable_token not in {"non-recoupable", "non recoupable", "no", "false"},
+                contact_email=match.group("email").strip() if match.group("email") else None
+            )
+        )
+
+    return split_sheet
 
 
 def _allocate_by_weight(
@@ -352,6 +433,156 @@ def _analyze_copyright_eligibility(
         ai_disclosure_required=ai_disclosure_required,
         checklist_findings=findings,
         filing_guidance=filing_guidance
+    )
+
+
+def run_legal_document_ingestion(
+    *,
+    raw_text: str,
+    source_name: str,
+    thread_id: str | None = None
+) -> LegalDocumentIngestionResponse:
+    artist_name = _extract_line_value(
+        raw_text,
+        [r"^\s*artist(?: name)?\s*:\s*(.+)$"]
+    ) or "Unknown artist"
+    track_title = _extract_line_value(
+        raw_text,
+        [r"^\s*(?:track|song|title)\s*:\s*(.+)$"]
+    ) or "Untitled track"
+    contract_reference = _extract_line_value(
+        raw_text,
+        [r"^\s*contract(?: reference| id)?\s*:\s*(.+)$"]
+    )
+
+    gross_revenue = _parse_decimal_value(
+        _extract_line_value(raw_text, [r"^\s*gross (?:revenue|receipts?)\s*:\s*(.+)$"])
+    )
+    royalty_pool_rate = _parse_rate_value(
+        _extract_line_value(raw_text, [r"^\s*royalty pool rate\s*:\s*(.+)$"]),
+        Decimal("1.00000")
+    )
+    distribution_fee_rate = _parse_rate_value(
+        _extract_line_value(raw_text, [r"^\s*distribution fee rate\s*:\s*(.+)$"]),
+        Decimal("0.00000")
+    )
+    advance_amount = _parse_decimal_value(
+        _extract_line_value(raw_text, [r"^\s*advance(?: amount)?\s*:\s*(.+)$"])
+    )
+    prior_unrecouped_balance = _parse_decimal_value(
+        _extract_line_value(raw_text, [r"^\s*prior unrecouped balance\s*:\s*(.+)$"])
+    )
+    recoupment_rate = _parse_rate_value(
+        _extract_line_value(raw_text, [r"^\s*recoupment rate\s*:\s*(.+)$"]),
+        Decimal("1.00000")
+    )
+
+    split_sheet = _extract_split_sheet_lines(raw_text)
+    checklist = CopyrightChecklistInput(
+        has_human_written_lyrics=_extract_boolean_value(
+            raw_text,
+            ["human written lyrics", "has human written lyrics"],
+            True
+        ),
+        has_human_composed_melody=_extract_boolean_value(
+            raw_text,
+            ["human composed melody", "has human composed melody"],
+            True
+        ),
+        has_human_arranged_structure=_extract_boolean_value(
+            raw_text,
+            ["human arranged structure", "has human arranged structure"],
+            True
+        ),
+        ai_generated_lyrics=_extract_boolean_value(
+            raw_text,
+            ["ai generated lyrics"],
+            False
+        ),
+        ai_generated_melody=_extract_boolean_value(
+            raw_text,
+            ["ai generated melody"],
+            False
+        ),
+        ai_generated_master_audio=_extract_boolean_value(
+            raw_text,
+            ["ai generated master audio"],
+            False
+        ),
+        ai_generated_artwork=_extract_boolean_value(
+            raw_text,
+            ["ai generated artwork"],
+            False
+        ),
+        human_edited_ai_material=_extract_boolean_value(
+            raw_text,
+            ["human edited ai material"],
+            False
+        ),
+        source_material_rights_cleared=_extract_boolean_value(
+            raw_text,
+            ["source material rights cleared"],
+            True
+        ),
+        contributor_agreements_collected=_extract_boolean_value(
+            raw_text,
+            ["contributor agreements collected"],
+            False
+        ),
+        splits_confirmed_by_all_parties=_extract_boolean_value(
+            raw_text,
+            ["splits confirmed by all parties"],
+            False
+        )
+    )
+
+    extraction_issues: list[str] = []
+    missing_fields: list[str] = []
+
+    if artist_name == "Unknown artist":
+        missing_fields.append("artist_name")
+    if track_title == "Untitled track":
+        missing_fields.append("track_title")
+    if not contract_reference:
+        missing_fields.append("contract_reference")
+    if not split_sheet:
+        extraction_issues.append(
+            "No structured split-sheet lines were detected. Use lines such as 'Name | role | 50% | recoupable | email@example.com'."
+        )
+        split_sheet = [SplitSheetLineItem(
+            party_name="",
+            role="artist",
+            ownership_percent=Decimal("0.00"),
+            recoupable=True,
+            contact_email=None
+        )]
+        missing_fields.append("split_sheet")
+
+    if contract_reference is None:
+        extraction_issues.append("Contract reference was not detected in the source document.")
+
+    extracted_data = LegalDocumentExtractionData(
+        artist_name=artist_name,
+        track_title=track_title,
+        contract_reference=contract_reference,
+        split_sheet=split_sheet,
+        gross_revenue=_quantize_currency(gross_revenue),
+        royalty_pool_rate=royalty_pool_rate,
+        distribution_fee_rate=distribution_fee_rate,
+        advance_amount=_quantize_currency(advance_amount),
+        prior_unrecouped_balance=_quantize_currency(prior_unrecouped_balance),
+        recoupment_rate=recoupment_rate,
+        copyright_checklist=checklist
+    )
+
+    return LegalDocumentIngestionResponse(
+        thread_id=thread_id or f"legal-royalty-{int(datetime.now(timezone.utc).timestamp())}",
+        source_name=source_name,
+        extracted_data=extracted_data,
+        extraction_issues=extraction_issues,
+        missing_fields=missing_fields,
+        requires_human_review=bool(extraction_issues or missing_fields),
+        generated_at=datetime.now(timezone.utc)
     )
 
 

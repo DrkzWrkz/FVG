@@ -481,6 +481,30 @@ class LegalApprovalCheckpointResponse(BaseModel):
     recorded_at: datetime
 
 
+class LegalDocumentExtractionData(BaseModel):
+    artist_name: str
+    track_title: str
+    contract_reference: str | None = None
+    split_sheet: list[SplitSheetLineItem]
+    gross_revenue: Decimal
+    royalty_pool_rate: Decimal
+    distribution_fee_rate: Decimal
+    advance_amount: Decimal
+    prior_unrecouped_balance: Decimal
+    recoupment_rate: Decimal
+    copyright_checklist: CopyrightChecklistInput
+
+
+class LegalDocumentIngestionResponse(BaseModel):
+    thread_id: str
+    source_name: str
+    extracted_data: LegalDocumentExtractionData
+    extraction_issues: list[str]
+    missing_fields: list[str]
+    requires_human_review: bool
+    generated_at: datetime
+
+
 class LegalRoyaltyResponse(BaseModel):
     thread_id: str
     state_id: UUID | None = None
