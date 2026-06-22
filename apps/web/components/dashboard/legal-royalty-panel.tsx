@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Calculator,
   CheckCircle2,
   Gavel,
   Loader2,
+  RefreshCcw,
   Plus,
   ReceiptText,
   Scale,
+  Search,
   ShieldCheck,
   Trash2
 } from "lucide-react";
@@ -23,12 +25,14 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import type {
+  AgentStateHistorySummary,
+  AgentStateRead,
   CopyrightChecklistInput,
   LegalApprovalCheckpointResponse,
   LegalRoyaltyResponse,
   SplitSheetLineItem
 } from "@/lib/agent-types";
-import { postToOrchestrator } from "@/lib/orchestrator-client";
+import { getFromOrchestrator, postToOrchestrator } from "@/lib/orchestrator-client";
 
 const fieldClassName =
   "w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400/50";
@@ -52,6 +56,115 @@ function formatCurrency(value: string) {
   });
 }
 
+const DEFAULT_COPYRIGHT_CHECKLIST: CopyrightChecklistInput = {
+  has_human_written_lyrics: true,
+  has_human_composed_melody: true,
+  has_human_arranged_structure: true,
+  ai_generated_lyrics: true,
+  ai_generated_melody: false,
+  ai_generated_master_audio: false,
+  ai_generated_artwork: true,
+  human_edited_ai_material: true,
+  source_material_rights_cleared: true,
+  contributor_agreements_collected: false,
+  splits_confirmed_by_all_parties: false
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeSplitSheet(value: unknown): SplitSheetLineItem[] {
+  if (!Array.isArray(value)) {
+    return [createSplitLine()];
+  }
+
+  const items = value
+    .map((entry) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      return createSplitLine({
+        party_name: asString(entry.party_name),
+        role: asString(entry.role, "artist"),
+        ownership_percent: asString(entry.ownership_percent, "0.00"),
+        recoupable: asBoolean(entry.recoupable, true),
+        contact_email: asString(entry.contact_email)
+      });
+    })
+    .filter((entry): entry is SplitSheetLineItem => entry !== null);
+
+  return items.length > 0 ? items : [createSplitLine()];
+}
+
+function normalizeChecklist(value: unknown): CopyrightChecklistInput {
+  if (!isRecord(value)) {
+    return DEFAULT_COPYRIGHT_CHECKLIST;
+  }
+
+  return {
+    has_human_written_lyrics: asBoolean(
+      value.has_human_written_lyrics,
+      DEFAULT_COPYRIGHT_CHECKLIST.has_human_written_lyrics
+    ),
+    has_human_composed_melody: asBoolean(
+      value.has_human_composed_melody,
+      DEFAULT_COPYRIGHT_CHECKLIST.has_human_composed_melody
+    ),
+    has_human_arranged_structure: asBoolean(
+      value.has_human_arranged_structure,
+      DEFAULT_COPYRIGHT_CHECKLIST.has_human_arranged_structure
+    ),
+    ai_generated_lyrics: asBoolean(
+      value.ai_generated_lyrics,
+      DEFAULT_COPYRIGHT_CHECKLIST.ai_generated_lyrics
+    ),
+    ai_generated_melody: asBoolean(
+      value.ai_generated_melody,
+      DEFAULT_COPYRIGHT_CHECKLIST.ai_generated_melody
+    ),
+    ai_generated_master_audio: asBoolean(
+      value.ai_generated_master_audio,
+      DEFAULT_COPYRIGHT_CHECKLIST.ai_generated_master_audio
+    ),
+    ai_generated_artwork: asBoolean(
+      value.ai_generated_artwork,
+      DEFAULT_COPYRIGHT_CHECKLIST.ai_generated_artwork
+    ),
+    human_edited_ai_material: asBoolean(
+      value.human_edited_ai_material,
+      DEFAULT_COPYRIGHT_CHECKLIST.human_edited_ai_material
+    ),
+    source_material_rights_cleared: asBoolean(
+      value.source_material_rights_cleared,
+      DEFAULT_COPYRIGHT_CHECKLIST.source_material_rights_cleared
+    ),
+    contributor_agreements_collected: asBoolean(
+      value.contributor_agreements_collected,
+      DEFAULT_COPYRIGHT_CHECKLIST.contributor_agreements_collected
+    ),
+    splits_confirmed_by_all_parties: asBoolean(
+      value.splits_confirmed_by_all_parties,
+      DEFAULT_COPYRIGHT_CHECKLIST.splits_confirmed_by_all_parties
+    )
+  };
+}
+
 export function LegalRoyaltyPanel() {
   const [artistName, setArtistName] = useState("Nova Bloom");
   const [trackTitle, setTrackTitle] = useState("Midnight Relay");
@@ -64,20 +177,9 @@ export function LegalRoyaltyPanel() {
   const [recoupmentRate, setRecoupmentRate] = useState("0.50000");
   const [persistState, setPersistState] = useState(true);
   const [threadId, setThreadId] = useState("");
+  const [threadLookupId, setThreadLookupId] = useState("");
   const [copyrightChecklist, setCopyrightChecklist] =
-    useState<CopyrightChecklistInput>({
-      has_human_written_lyrics: true,
-      has_human_composed_melody: true,
-      has_human_arranged_structure: true,
-      ai_generated_lyrics: true,
-      ai_generated_melody: false,
-      ai_generated_master_audio: false,
-      ai_generated_artwork: true,
-      human_edited_ai_material: true,
-      source_material_rights_cleared: true,
-      contributor_agreements_collected: false,
-      splits_confirmed_by_all_parties: false
-    });
+    useState<CopyrightChecklistInput>(DEFAULT_COPYRIGHT_CHECKLIST);
   const [splitSheet, setSplitSheet] = useState<SplitSheetLineItem[]>([
     createSplitLine({
       party_name: "Nova Bloom",
@@ -103,15 +205,20 @@ export function LegalRoyaltyPanel() {
   ]);
   const [result, setResult] = useState<LegalRoyaltyResponse | null>(null);
   const [approvalResult, setApprovalResult] = useState<LegalApprovalCheckpointResponse | null>(null);
+  const [currentReviewStatus, setCurrentReviewStatus] = useState<string | null>(null);
   const [reviewerName, setReviewerName] = useState("Casey Morgan");
   const [reviewerRole, setReviewerRole] = useState("Label Counsel");
   const [reviewerNotes, setReviewerNotes] = useState(
     "Reviewed copyright checklist and payout waterfall."
   );
+  const [legalHistory, setLegalHistory] = useState<AgentStateHistorySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApplyingCheckpoint, setIsApplyingCheckpoint] = useState(false);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const declaredTotal = useMemo(
     () =>
@@ -204,6 +311,28 @@ export function LegalRoyaltyPanel() {
     }
   ];
 
+  const loadLegalHistory = async () => {
+    setLoadError(null);
+    setIsLoadingHistory(true);
+
+    try {
+      const response = await getFromOrchestrator<AgentStateHistorySummary[]>(
+        "/api/v1/agents/history?agent_name=legal-royalty&limit=8"
+      );
+      setLegalHistory(response);
+    } catch (historyError) {
+      setLoadError(
+        historyError instanceof Error ? historyError.message : "Unable to load legal thread history."
+      );
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLegalHistory();
+  }, []);
+
   const updateLineItem = <K extends keyof SplitSheetLineItem>(
     index: number,
     key: K,
@@ -224,6 +353,96 @@ export function LegalRoyaltyPanel() {
       ...current,
       [key]: value
     }));
+  };
+
+  const hydrateFromThreadState = (state: AgentStateRead) => {
+    const latestInputEvent = [...state.conversation_thread]
+      .reverse()
+      .find((event) => event.direction === "input");
+    const latestOutputEvent = [...state.conversation_thread]
+      .reverse()
+      .find((event) => event.direction === "output");
+    const latestCheckpointEvent = [...state.conversation_thread]
+      .reverse()
+      .find((event) => event.direction === "checkpoint");
+
+    if (isRecord(latestInputEvent?.payload)) {
+      const payload = latestInputEvent.payload;
+      setArtistName(asString(payload.artist_name, artistName));
+      setTrackTitle(asString(payload.track_title, trackTitle));
+      setContractReference(asString(payload.contract_reference));
+      setGrossRevenue(asString(payload.gross_revenue, grossRevenue));
+      setRoyaltyPoolRate(asString(payload.royalty_pool_rate, royaltyPoolRate));
+      setDistributionFeeRate(asString(payload.distribution_fee_rate, distributionFeeRate));
+      setAdvanceAmount(asString(payload.advance_amount, advanceAmount));
+      setPriorUnrecoupedBalance(
+        asString(payload.prior_unrecouped_balance, priorUnrecoupedBalance)
+      );
+      setRecoupmentRate(asString(payload.recoupment_rate, recoupmentRate));
+      setPersistState(asBoolean(payload.persist_state, true));
+      setSplitSheet(normalizeSplitSheet(payload.split_sheet));
+      setCopyrightChecklist(normalizeChecklist(payload.copyright_checklist));
+    }
+
+    if (isRecord(latestOutputEvent?.payload)) {
+      setResult({
+        ...(latestOutputEvent.payload as LegalRoyaltyResponse),
+        state_id: state.id
+      });
+    } else {
+      setResult(null);
+    }
+
+    if (isRecord(latestCheckpointEvent?.payload)) {
+      setApprovalResult({
+        state_id: state.id,
+        thread_id: state.thread_id,
+        previous_status: asString(latestCheckpointEvent.payload.previous_status),
+        new_status: state.state_status,
+        reviewer_name: asString(latestCheckpointEvent.payload.reviewer_name),
+        reviewer_role: asString(latestCheckpointEvent.payload.reviewer_role),
+        notes: asString(latestCheckpointEvent.payload.notes),
+        recorded_at: asString(
+          latestCheckpointEvent.payload.recorded_at,
+          latestCheckpointEvent.timestamp ?? new Date().toISOString()
+        )
+      });
+      setReviewerName(asString(latestCheckpointEvent.payload.reviewer_name, reviewerName));
+      setReviewerRole(asString(latestCheckpointEvent.payload.reviewer_role, reviewerRole));
+      setReviewerNotes(asString(latestCheckpointEvent.payload.notes, reviewerNotes));
+    } else {
+      setApprovalResult(null);
+    }
+
+    setThreadId(state.thread_id);
+    setThreadLookupId(state.thread_id);
+    setCurrentReviewStatus(state.state_status);
+    setApprovalError(null);
+    setError(null);
+  };
+
+  const loadPersistedThread = async (requestedThreadId: string) => {
+    const normalizedThreadId = requestedThreadId.trim();
+    if (!normalizedThreadId) {
+      setLoadError("Enter a legal thread ID to load a persisted review.");
+      return;
+    }
+
+    setLoadError(null);
+    setIsLoadingThread(true);
+
+    try {
+      const state = await getFromOrchestrator<AgentStateRead>(
+        `/api/v1/agents/legal-royalty/threads/${encodeURIComponent(normalizedThreadId)}`
+      );
+      hydrateFromThreadState(state);
+    } catch (threadError) {
+      setLoadError(
+        threadError instanceof Error ? threadError.message : "Unable to load legal thread."
+      );
+    } finally {
+      setIsLoadingThread(false);
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -257,6 +476,11 @@ export function LegalRoyaltyPanel() {
       setResult(response);
       setApprovalResult(null);
       setThreadId(response.thread_id);
+      setThreadLookupId(response.thread_id);
+      setCurrentReviewStatus(
+        persistState ? (response.requires_human_review ? "human-review-required" : "completed") : null
+      );
+      void loadLegalHistory();
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Unknown error.");
     } finally {
@@ -284,6 +508,14 @@ export function LegalRoyaltyPanel() {
       );
 
       setApprovalResult(response);
+      setCurrentReviewStatus(response.new_status);
+      if (result) {
+        setResult({
+          ...result,
+          state_id: response.state_id
+        });
+      }
+      void loadLegalHistory();
     } catch (checkpointError) {
       setApprovalError(
         checkpointError instanceof Error ? checkpointError.message : "Unknown checkpoint error."
@@ -305,6 +537,88 @@ export function LegalRoyaltyPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-8">
+        <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-white">Reload persisted legal thread</p>
+              <p className="mt-1 text-sm text-slate-400">
+                Pull an existing legal review back into the panel for re-review, edits, or a new
+                checkpoint decision.
+              </p>
+            </div>
+            <Button type="button" variant="secondary" onClick={() => void loadLegalHistory()}>
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Refresh legal history
+            </Button>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
+            <label className="space-y-2">
+              <span className={labelClassName}>Saved thread ID</span>
+              <input
+                className={fieldClassName}
+                value={threadLookupId}
+                onChange={(event) => setThreadLookupId(event.target.value)}
+                placeholder="legal-royalty-..."
+              />
+            </label>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                onClick={() => void loadPersistedThread(threadLookupId)}
+                disabled={isLoadingThread}
+              >
+                {isLoadingThread ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Load thread
+              </Button>
+            </div>
+          </div>
+
+          {loadError ? (
+            <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              {loadError}
+            </div>
+          ) : null}
+
+          <div className="mt-5 space-y-3">
+            <p className="text-sm font-medium text-white">Recent persisted legal runs</p>
+            {isLoadingHistory ? (
+              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-4 text-sm text-slate-300">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-300" />
+                Loading legal thread history...
+              </div>
+            ) : legalHistory.length > 0 ? (
+              legalHistory.map((summary) => (
+                <button
+                  key={summary.id}
+                  type="button"
+                  onClick={() => void loadPersistedThread(summary.thread_id)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-white/20"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-white">{summary.thread_id}</p>
+                      <p className="mt-1 text-sm text-slate-300">{summary.state_status}</p>
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-200">
+                      {new Date(summary.updated_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                    <span>{summary.conversation_event_count} events</span>
+                    <span>{summary.tool_execution_count} tool logs</span>
+                    <span>{summary.latest_tool ?? "no tool metadata"}</span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">
+                No persisted legal threads yet. Save a legal run to make it reloadable here.
+              </div>
+            )}
+          </div>
+        </div>
+
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="space-y-2">
@@ -494,7 +808,7 @@ export function LegalRoyaltyPanel() {
 
         {result ? (
           <div className="space-y-5 border-t border-white/10 pt-6">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Thread ID</p>
                 <p className="mt-2 text-sm font-medium text-white">{result.thread_id}</p>
@@ -502,6 +816,10 @@ export function LegalRoyaltyPanel() {
               <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Persisted state</p>
                 <p className="mt-2 text-sm font-medium text-white">{result.state_id ?? "Not persisted"}</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Current status</p>
+                <p className="mt-2 text-sm font-medium text-white">{currentReviewStatus ?? "Not persisted"}</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-slate-950/45 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Human review</p>
