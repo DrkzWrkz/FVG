@@ -76,7 +76,7 @@ def _social_schedule(
             day_label=day_label,
             channel=channel,
             objective=focus,
-            copy=(
+            caption=(
                 f"{payload.artist_name} uses {channel} to push {phase.lower()}: "
                 f"{hook}."
             ),

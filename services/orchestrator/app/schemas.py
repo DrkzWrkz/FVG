@@ -231,7 +231,7 @@ class SocialScheduleItem(BaseModel):
     day_label: str
     channel: str
     objective: str
-    copy: str
+    caption: str
     asset_prompt: str
 
 

@@ -26,8 +26,6 @@ def reset_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
-    if TEST_DB_PATH.exists():
-        TEST_DB_PATH.unlink()
 
 
 def test_foundation_crud_workflow():
