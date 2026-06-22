@@ -183,3 +183,48 @@ export interface MarketingCrewResponse {
   outreach_plan: OutreachPlanOutput;
   generated_at: string;
 }
+
+export interface AgentStateEvent {
+  timestamp?: string;
+  direction?: string;
+  payload?: unknown;
+}
+
+export interface AgentStateLog {
+  timestamp?: string;
+  tool?: string;
+  status?: string;
+  agent_name?: string;
+  step?: string;
+  thread_id?: string;
+}
+
+export interface AgentStateRead {
+  id: string;
+  agent_name: string;
+  thread_id: string;
+  entity_type: string;
+  entity_id: string | null;
+  conversation_thread: AgentStateEvent[];
+  graph_history: AgentStateLog[];
+  tool_execution_logs: AgentStateLog[];
+  state_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentStateHistorySummary {
+  id: string;
+  agent_name: string;
+  thread_id: string;
+  entity_type: string;
+  entity_id: string | null;
+  state_status: string;
+  created_at: string;
+  updated_at: string;
+  conversation_event_count: number;
+  graph_step_count: number;
+  tool_execution_count: number;
+  latest_tool: string | null;
+  latest_output_preview: unknown;
+}

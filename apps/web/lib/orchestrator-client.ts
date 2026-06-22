@@ -1,5 +1,20 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+async function parseResponse<TResponse>(response: Response): Promise<TResponse> {
+  if (!response.ok) {
+    const fallbackMessage = `Request failed with status ${response.status}.`;
+
+    try {
+      const errorPayload = (await response.json()) as { detail?: string };
+      throw new Error(errorPayload.detail ?? fallbackMessage);
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+  }
+
+  return (await response.json()) as TResponse;
+}
+
 export async function postToOrchestrator<TResponse, TRequest>(
   path: string,
   payload: TRequest
@@ -13,16 +28,14 @@ export async function postToOrchestrator<TResponse, TRequest>(
     cache: "no-store"
   });
 
-  if (!response.ok) {
-    const fallbackMessage = `Request failed with status ${response.status}.`;
+  return parseResponse<TResponse>(response);
+}
 
-    try {
-      const errorPayload = (await response.json()) as { detail?: string };
-      throw new Error(errorPayload.detail ?? fallbackMessage);
-    } catch {
-      throw new Error(fallbackMessage);
-    }
-  }
+export async function getFromOrchestrator<TResponse>(path: string): Promise<TResponse> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    cache: "no-store"
+  });
 
-  return (await response.json()) as TResponse;
+  return parseResponse<TResponse>(response);
 }

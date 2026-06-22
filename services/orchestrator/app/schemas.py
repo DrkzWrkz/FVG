@@ -159,6 +159,22 @@ class AgentStateRead(AgentStateBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AgentStateHistorySummary(BaseModel):
+    id: UUID
+    agent_name: str
+    thread_id: str
+    entity_type: str
+    entity_id: UUID | None = None
+    state_status: str
+    created_at: datetime
+    updated_at: datetime
+    conversation_event_count: int
+    graph_step_count: int
+    tool_execution_count: int
+    latest_tool: str | None = None
+    latest_output_preview: Any | None = None
+
+
 class DiscoveryCandidate(BaseModel):
     artist_name: str
     track_title: str

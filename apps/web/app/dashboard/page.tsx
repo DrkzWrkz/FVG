@@ -3,6 +3,7 @@ import { ArrowLeft, BarChart3, BrainCircuit, Workflow } from "lucide-react";
 
 import { ArDiscoveryPanel } from "@/components/dashboard/ar-discovery-panel";
 import { MarketingPrPanel } from "@/components/dashboard/marketing-pr-panel";
+import { ThreadHistoryPanel } from "@/components/dashboard/thread-history-panel";
 import { VirtualManagerPanel } from "@/components/dashboard/virtual-manager-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,6 +86,7 @@ export default function DashboardPage() {
         <ArDiscoveryPanel />
         <VirtualManagerPanel />
         <MarketingPrPanel />
+        <ThreadHistoryPanel />
       </section>
     </main>
   );

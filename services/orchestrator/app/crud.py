@@ -26,6 +26,37 @@ def list_records(db: Session, model: type, offset: int = 0, limit: int = 50) -> 
     return list(db.scalars(statement).all())
 
 
+def list_agent_states_filtered(
+    db: Session,
+    *,
+    offset: int = 0,
+    limit: int = 50,
+    agent_name: str | None = None,
+    state_status: str | None = None,
+    entity_type: str | None = None,
+    thread_id: str | None = None
+) -> list[AgentState]:
+    statement = select(AgentState)
+
+    if agent_name:
+        statement = statement.where(AgentState.agent_name == agent_name)
+    if state_status:
+        statement = statement.where(AgentState.state_status == state_status)
+    if entity_type:
+        statement = statement.where(AgentState.entity_type == entity_type)
+    if thread_id:
+        statement = statement.where(AgentState.thread_id == thread_id)
+
+    statement = (
+        statement
+        .order_by(AgentState.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    return list(db.scalars(statement).all())
+
+
 def get_record_or_404(db: Session, model: type, record_id: UUID, resource_name: str) -> Any:
     record = db.get(model, record_id)
     if record is None:
@@ -141,6 +172,13 @@ def get_agent_state_by_thread(
         AgentState.thread_id == thread_id
     )
     return db.scalar(statement)
+
+
+def get_latest_output_payload(state: AgentState) -> Any | None:
+    for event in reversed(state.conversation_thread or []):
+        if event.get("direction") == "output":
+            return event.get("payload")
+    return None
 
 
 def persist_agent_workflow_state(

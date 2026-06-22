@@ -221,3 +221,60 @@ def test_marketing_pr_crew_generates_pipeline_and_persists_state():
         )
         assert thread_response.status_code == 200
         assert thread_response.json()["agent_name"] == "marketing-pr-crew"
+
+
+def test_agent_history_route_filters_and_returns_saved_threads():
+    with TestClient(app) as client:
+        virtual_manager_response = client.post(
+            "/api/v1/agents/virtual-manager/release-plan",
+            json={
+                "artist_name": "Nova Bloom",
+                "track_title": "Midnight Relay",
+                "genre": "indie pop",
+                "mood": "cinematic",
+                "bpm": 124,
+                "release_date": "2026-08-14",
+                "campaign_objective": "Grow pre-saves and convert launch-day listeners into repeat streamers.",
+                "target_audience": "fans of emotionally detailed alt-pop with dancefloor crossover appeal",
+                "primary_platforms": ["TikTok", "Instagram Reels", "Spotify"],
+                "persist_state": True
+            }
+        )
+        assert virtual_manager_response.status_code == 200
+
+        marketing_response = client.post(
+            "/api/v1/agents/marketing-pr/launch-campaign",
+            json={
+                "artist_name": "Nova Bloom",
+                "track_title": "Midnight Relay",
+                "genre": "indie pop",
+                "mood": "cinematic",
+                "bpm": 124,
+                "campaign_objective": "Expand discovery and secure editorial plus culture coverage.",
+                "target_audience": "fans of emotionally detailed alt-pop with playlist and social sharing behavior",
+                "comparison_artists": ["MUNA", "The Japanese House"],
+                "differentiators": ["night-drive visuals", "high-retention hooks", "fan-first storytelling"],
+                "priority_markets": ["US", "UK", "CA"],
+                "persist_state": True
+            }
+        )
+        assert marketing_response.status_code == 200
+
+        history_response = client.get(
+            "/api/v1/agents/history",
+            params={"agent_name": "marketing-pr-crew"}
+        )
+        assert history_response.status_code == 200
+
+        history_payload = history_response.json()
+        assert len(history_payload) == 1
+        assert history_payload[0]["agent_name"] == "marketing-pr-crew"
+        assert history_payload[0]["latest_tool"] == "market-research-agent"
+        assert history_payload[0]["tool_execution_count"] >= 1
+
+        filtered_state_response = client.get(
+            "/api/v1/agent-states",
+            params={"agent_name": "virtual-manager"}
+        )
+        assert filtered_state_response.status_code == 200
+        assert len(filtered_state_response.json()) == 1

@@ -17,7 +17,9 @@ from crud import (
     ensure_artist_exists,
     ensure_track_exists,
     get_agent_state_by_thread,
+    get_latest_output_payload,
     get_record_or_404,
+    list_agent_states_filtered,
     list_records,
     persist_agent_workflow_state,
     save_record,
@@ -28,6 +30,7 @@ from models import AgentState, Artist, Contract, Track
 from schemas import (
     AgentBlueprint,
     AgentStateCreate,
+    AgentStateHistorySummary,
     AgentStateRead,
     AgentStateUpdate,
     ArtistCreate,
@@ -75,6 +78,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+
+def build_agent_state_summary(state: AgentState) -> AgentStateHistorySummary:
+    latest_tool_log = (state.tool_execution_logs or [])[-1] if state.tool_execution_logs else None
+
+    return AgentStateHistorySummary(
+        id=state.id,
+        agent_name=state.agent_name,
+        thread_id=state.thread_id,
+        entity_type=state.entity_type,
+        entity_id=state.entity_id,
+        state_status=state.state_status,
+        created_at=state.created_at,
+        updated_at=state.updated_at,
+        conversation_event_count=len(state.conversation_thread or []),
+        graph_step_count=len(state.graph_history or []),
+        tool_execution_count=len(state.tool_execution_logs or []),
+        latest_tool=latest_tool_log.get("tool") if latest_tool_log else None,
+        latest_output_preview=get_latest_output_payload(state)
+    )
 
 
 @app.get("/", tags=["system"])
@@ -359,9 +382,47 @@ def preview_contract_intake(payload: ContractCreate) -> ContractCreate:
 def list_agent_states(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
+    agent_name: str | None = Query(default=None),
+    state_status: str | None = Query(default=None),
+    entity_type: str | None = Query(default=None),
+    thread_id: str | None = Query(default=None),
     db: Session = Depends(get_db)
 ) -> list[AgentState]:
-    return list_records(db, AgentState, offset=offset, limit=limit)
+    return list_agent_states_filtered(
+        db,
+        offset=offset,
+        limit=limit,
+        agent_name=agent_name,
+        state_status=state_status,
+        entity_type=entity_type,
+        thread_id=thread_id
+    )
+
+
+@app.get(
+    f"{settings.api_prefix}/agents/history",
+    response_model=list[AgentStateHistorySummary],
+    tags=["agents"]
+)
+def list_agent_history(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    agent_name: str | None = Query(default=None),
+    state_status: str | None = Query(default=None),
+    entity_type: str | None = Query(default=None),
+    thread_id: str | None = Query(default=None),
+    db: Session = Depends(get_db)
+) -> list[AgentStateHistorySummary]:
+    states = list_agent_states_filtered(
+        db,
+        offset=offset,
+        limit=limit,
+        agent_name=agent_name,
+        state_status=state_status,
+        entity_type=entity_type,
+        thread_id=thread_id
+    )
+    return [build_agent_state_summary(state) for state in states]
 
 
 @app.post(
