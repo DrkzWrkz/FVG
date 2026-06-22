@@ -96,6 +96,27 @@ export function LegalRoyaltyPanel() {
     [splitSheet]
   );
 
+  const simulationFields: Array<{
+    label: string;
+    value: string;
+    setValue: (value: string) => void;
+  }> = [
+    { label: "Gross revenue", value: grossRevenue, setValue: setGrossRevenue },
+    { label: "Royalty pool rate", value: royaltyPoolRate, setValue: setRoyaltyPoolRate },
+    {
+      label: "Distribution fee rate",
+      value: distributionFeeRate,
+      setValue: setDistributionFeeRate
+    },
+    { label: "Advance amount", value: advanceAmount, setValue: setAdvanceAmount },
+    {
+      label: "Prior unrecouped balance",
+      value: priorUnrecoupedBalance,
+      setValue: setPriorUnrecoupedBalance
+    },
+    { label: "Recoupment rate", value: recoupmentRate, setValue: setRecoupmentRate }
+  ];
+
   const updateLineItem = <K extends keyof SplitSheetLineItem>(
     index: number,
     key: K,
@@ -186,20 +207,13 @@ export function LegalRoyaltyPanel() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[
-              ["Gross revenue", grossRevenue, setGrossRevenue],
-              ["Royalty pool rate", royaltyPoolRate, setRoyaltyPoolRate],
-              ["Distribution fee rate", distributionFeeRate, setDistributionFeeRate],
-              ["Advance amount", advanceAmount, setAdvanceAmount],
-              ["Prior unrecouped balance", priorUnrecoupedBalance, setPriorUnrecoupedBalance],
-              ["Recoupment rate", recoupmentRate, setRecoupmentRate]
-            ].map(([label, value, setter]) => (
+            {simulationFields.map(({ label, value, setValue }) => (
               <label key={label} className="space-y-2">
                 <span className={labelClassName}>{label}</span>
                 <input
                   className={fieldClassName}
                   value={value}
-                  onChange={(event) => (setter as (value: string) => void)(event.target.value)}
+                  onChange={(event) => setValue(event.target.value)}
                 />
               </label>
             ))}
