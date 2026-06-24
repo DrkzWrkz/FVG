@@ -18,3 +18,4 @@ coverage/
 pnpm-lock.yaml
 yarn.lock
 record_label.db
+.local/

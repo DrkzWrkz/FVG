@@ -85,24 +85,58 @@ The FastAPI service exposes the first foundational entry points:
 
 ## Quick start
 
+### Option A — Local dev (no Docker)
+
 ```bash
 npm install
 python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Run the services locally:
+For a quick demo without PostgreSQL, add to `.env`:
 
 ```bash
-npm run dev:web
-npm run dev:api
+DATABASE_URL=sqlite+pysqlite:////absolute/path/to/record_label.db
+DATABASE_AUTO_CREATE=true
 ```
 
-Apply the initial PostgreSQL migration when a database is available:
+Run the services in two terminals:
+
+```bash
+npm run dev:api   # http://localhost:8000
+npm run dev:web   # http://localhost:3000
+```
+
+### Option B — Full stack with Docker (recommended)
+
+Requires Docker and Docker Compose.
+
+```bash
+npm install
+cp .env.example .env
+docker compose up --build
+```
+
+In a second terminal, once Postgres is healthy, apply the migration:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d autonomous_label \
+  -f /dev/stdin < services/orchestrator/migrations/0001_foundation.sql
+```
+
+If you have `psql` installed locally, you can instead run:
 
 ```bash
 npm run db:migrate
 ```
+
+**URLs**
+
+- Web: http://localhost:3000
+- Dashboard: http://localhost:3000/dashboard
+- API: http://localhost:8000
+- API docs: http://localhost:8000/docs
+- Qdrant: http://localhost:6333
 
 ## Incremental implementation path
 

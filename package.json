@@ -16,6 +16,9 @@
     "dev:api": "uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir services/orchestrator/app",
     "check:api": "python3 -m compileall services/orchestrator/app",
     "test:api": "python3 -m pytest services/orchestrator/tests",
-    "db:migrate": "psql \"${DATABASE_URL_PSQL:-postgresql://postgres:postgres@localhost:5432/autonomous_label}\" -f services/orchestrator/migrations/0001_foundation.sql"
+    "db:migrate": "psql \"${DATABASE_URL_PSQL:-postgresql://postgres:postgres@localhost:5432/autonomous_label}\" -f services/orchestrator/migrations/0001_foundation.sql",
+    "compose:up": "docker compose up --build",
+    "compose:down": "docker compose down",
+    "db:migrate:docker": "docker compose exec -T postgres psql -U postgres -d autonomous_label -f /dev/stdin < services/orchestrator/migrations/0001_foundation.sql"
   }
 }
